@@ -1,34 +1,7 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<title>WebGIS SHP GitHub</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>
-body { margin:0; font-family:Arial; }
-#map { height:100vh; width: 75%; float:left; }
-#sidebar { width:25%; float:left; height:100vh; overflow:auto; padding:10px; box-sizing:border-box; border-left:1px solid #ccc; }
-#sidebar h2 { font-size:16px; margin-top:0; }
-.file-item { margin-bottom:10px; }
-.file-item button { margin-left:5px; }
-#loading { font-weight:bold; margin-bottom:10px; }
-</style>
-</head>
-<body>
-
-<div id="map"></div>
-<div id="sidebar">
-  <h2>Daftar File SHP</h2>
-  <div id="loading">Memuat file...</div>
-  <div id="fileList"></div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
-
 <script>
 // ================= MAP =================
 const map = L.map('map').setView([-2.5489,118.0149],5);
+
 L.tileLayer(
   'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
   { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'] }
@@ -38,11 +11,13 @@ let layerStore = {};
 let centerMarkers = {};
 
 // ================= CONFIG =================
-const OWNER = "agenkkkk"; // ganti dengan username GitHub-mu
-const REPO = "GSN";       // ganti dengan nama repo
-const FOLDER = "shp";     // folder tempat SHP .zip
-const BRANCH = "main";    // branch repo
-const markerImage = "img/point-of-interest.png"; // image marker
+const OWNER = "agenkkkk";
+const REPO = "GSN";
+const FOLDER = "shp";
+const BRANCH = "main";
+
+// 🔥 Pakai URL GitHub Pages penuh
+const markerImage = "https://agenkkkk.github.io/GSN/img/point-of-interest.png";
 
 // ================= UTILS =================
 function stringToColor(str){
@@ -54,23 +29,9 @@ function stringToColor(str){
     return "#" + "00000".substring(0,6-color.length) + color;
 }
 
-function getGeoJSONCenter(geojson){
-    let coords = [];
-    geojson.features.forEach(f => {
-        if(f.geometry.type === "Point"){
-            coords.push(f.geometry.coordinates);
-        } else if(f.geometry.type === "Polygon"){
-            coords.push(f.geometry.coordinates[0]);
-        } else if(f.geometry.type === "MultiPolygon"){
-            coords.push(f.geometry.coordinates[0][0]);
-        } else if(f.geometry.type === "LineString"){
-            coords.push(f.geometry.coordinates);
-        }
-    });
-    coords = coords.flat(2);
-    const lng = coords.reduce((sum,c)=>sum+c[0],0)/coords.length;
-    const lat = coords.reduce((sum,c)=>sum+c[1],0)/coords.length;
-    return [lat,lng];
+function getGeoJSONCenter(layer){
+    const bounds = layer.getBounds();
+    return bounds.getCenter();
 }
 
 // ================= LOAD FILES =================
@@ -84,11 +45,6 @@ async function loadFiles(){
         const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
         const response = await fetch(apiUrl);
         const files = await response.json();
-
-        if(!Array.isArray(files)){
-            fileListDiv.innerHTML = "Gagal load daftar file.";
-            return;
-        }
 
         const shpFiles = files.filter(f => f.name.endsWith(".zip"));
 
@@ -119,32 +75,24 @@ async function loadFiles(){
                             weight: 1,
                             fillOpacity: 0.8
                         });
-                    },
-                    onEachFeature: function(feature, layer){
-                        if(feature.properties){
-                            let popup = "";
-                            for(let key in feature.properties){
-                                popup += `<b>${key}</b>: ${feature.properties[key]}<br>`;
-                            }
-                            layer.bindPopup(popup);
-                        }
                     }
                 }).addTo(map);
 
                 layerStore[name] = layer;
 
-                // Tambahkan marker di center
-                const center = getGeoJSONCenter(data);
-                const marker = L.marker(center, {
-                    icon: L.icon({
-                        iconUrl: markerImage,
-                        iconSize: [30,30],
-                        iconAnchor: [15,30]
-                    })
-                }).addTo(map);
+                // 🔥 Ambil center dari bounds layer (lebih akurat & aman)
+                const center = getGeoJSONCenter(layer);
+
+                const icon = L.icon({
+                    iconUrl: markerImage,
+                    iconSize: [35,35],
+                    iconAnchor: [17,35]
+                });
+
+                const marker = L.marker(center, { icon: icon }).addTo(map);
                 centerMarkers[name] = marker;
 
-            } catch(err){
+            }catch(err){
                 console.error("Gagal load SHP:", name, err);
             }
         }
@@ -157,13 +105,15 @@ async function loadFiles(){
 
     }catch(err){
         console.error("Gagal ambil daftar file:", err);
-        fileListDiv.innerHTML = "Gagal load daftar file.";
     } finally {
         loadingDiv.style.display = "none";
     }
 }
 
-function downloadFile(url){ window.open(url,"_blank"); }
+function downloadFile(url){ 
+    window.open(url,"_blank"); 
+}
+
 function zoomLayer(name){
     if(layerStore[name]){
         map.fitBounds(layerStore[name].getBounds());
@@ -171,27 +121,4 @@ function zoomLayer(name){
 }
 
 // ================= UPDATE MARKER SIZE =================
-function updateMarkerSize() {
-    const zoom = map.getZoom();
-    const size = zoom * 2; // ukuran marker sesuai zoom
-    for(let key in centerMarkers){
-        const m = centerMarkers[key];
-        const icon = L.icon({
-            iconUrl: markerImage,
-            iconSize: [size,size],
-            iconAnchor: [size/2,size]
-        });
-        m.setIcon(icon);
-    }
-}
-
-map.on('zoomend', updateMarkerSize);
-
-// Jalankan
-loadFiles().then(updateMarkerSize);
-
-</script>
-</body>
-</html>
-
-
+function updateMarkerSi
