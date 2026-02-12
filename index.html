@@ -11,6 +11,7 @@ body { margin:0; font-family:Arial; }
 #sidebar h2 { font-size:16px; margin-top:0; }
 .file-item { margin-bottom:10px; }
 .file-item button { margin-left:5px; }
+#loading { font-weight:bold; margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -18,7 +19,8 @@ body { margin:0; font-family:Arial; }
 <div id="map"></div>
 <div id="sidebar">
   <h2>Daftar File SHP</h2>
-  <div id="fileList">Loading...</div>
+  <div id="loading">Memuat file...</div>
+  <div id="fileList"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -27,7 +29,6 @@ body { margin:0; font-family:Arial; }
 <script>
 // ================= MAP =================
 const map = L.map('map').setView([-2.5489,118.0149],5);
-
 L.tileLayer(
   'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
   { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'] }
@@ -41,25 +42,33 @@ const REPO = "GSN";       // ganti dengan nama repo
 const FOLDER = "shp";     // folder tempat SHP .zip
 const BRANCH = "main";    // branch repo
 
+// ================= UTILS =================
+function stringToColor(str){
+    // Warna konsisten per file
+    let hash = 0;
+    for(let i=0;i<str.length;i++){ hash = str.charCodeAt(i) + ((hash<<5)-hash); }
+    let color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+    return "#" + "00000".substring(0,6-color.length) + color;
+}
+
 // ================= LOAD FILES =================
 async function loadFiles(){
     const fileListDiv = document.getElementById("fileList");
-    fileListDiv.innerHTML = "Loading...";
+    const loadingDiv = document.getElementById("loading");
+    fileListDiv.innerHTML = "";
+    loadingDiv.style.display = "block";
 
     try{
-        // Ambil daftar file via GitHub API
         const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
         const response = await fetch(apiUrl);
         const files = await response.json();
-
         const shpFiles = files.filter(f => f.name.endsWith(".zip"));
-        fileListDiv.innerHTML = "";
 
         for(const file of shpFiles){
             const name = file.name;
             const url = file.download_url;
 
-            // Tambah di sidebar
+            // Sidebar item
             const div = document.createElement("div");
             div.className = "file-item";
             div.innerHTML = `<b>${name}</b>
@@ -72,9 +81,10 @@ async function loadFiles(){
                 const res = await fetch(url);
                 const arrayBuffer = await res.arrayBuffer();
                 const data = await shp(arrayBuffer);
+                const color = stringToColor(name);
 
                 const layer = L.geoJSON(data,{
-                    style:{ color:"#"+Math.floor(Math.random()*16777215).toString(16), weight:2 },
+                    style:{ color: color, weight:2 },
                     onEachFeature: (feature, layer) => {
                         if(feature.properties){
                             let popup = "";
@@ -88,12 +98,12 @@ async function loadFiles(){
 
                 layerStore[name] = layer;
 
-            }catch(err){
+            } catch(err){
                 console.error("Gagal load SHP:", name, err);
             }
         }
 
-        // Zoom ke semua layer
+        // Zoom ke semua layer sekaligus
         const allLayers = Object.values(layerStore);
         if(allLayers.length>0){
             const group = L.featureGroup(allLayers);
@@ -103,22 +113,24 @@ async function loadFiles(){
     }catch(err){
         console.error("Gagal ambil daftar file:", err);
         fileListDiv.innerHTML = "Gagal load daftar file.";
+    } finally {
+        loadingDiv.style.display = "none";
     }
 }
 
 // Download
 function downloadFile(url){
-    window.open(url, "_blank");
+    window.open(url,"_blank");
 }
 
-// Zoom layer
+// Zoom per layer
 function zoomLayer(name){
     if(layerStore[name]){
         map.fitBounds(layerStore[name].getBounds());
     }
 }
 
-// Jalankan load
+// Jalankan
 loadFiles();
 </script>
 
