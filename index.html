@@ -144,7 +144,7 @@ function zoomLayer(name){
 // ================= UPDATE MARKER SIZE =================
 function updateMarkerSize() {
     const zoom = map.getZoom();
-    const size = Math.max(50, zoom * 4);
+    const size = Math.max(40, zoom * 4);
 
     for(let key in centerMarkers){
         const icon = L.icon({
@@ -162,3 +162,4 @@ loadFiles();
 </script>
 </body>
 </html>
+
