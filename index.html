@@ -77,7 +77,6 @@ async function loadFiles(){
             const div = document.createElement("div");
             div.className = "file-item";
             div.innerHTML = `<b>${name}</b>
-                             <button onclick="downloadFile('${url}')">Download</button>
                              <button onclick="zoomLayer('${name}')">Zoom</button>`;
             fileListDiv.appendChild(div);
 
@@ -88,9 +87,17 @@ async function loadFiles(){
                 const data = await shp(arrayBuffer);
                 const color = stringToColor(name);
 
-                const layer = L.geoJSON(data,{
-                    style:{ color: color, weight:2 },
-                    onEachFeature: (feature, layer) => {
+                // Fungsi untuk style layer
+                const layer = L.geoJSON(data, {
+                    pointToLayer: function(feature, latlng){
+                        // Jika point, buat marker dengan warna sama
+                        return L.circleMarker(latlng, { radius:6, fillColor: color, color: color, weight:1, fillOpacity:0.8 });
+                    },
+                    style: function(feature){
+                        // Jika polygon atau line, beri style warna
+                        return { color: color, weight:2, fillOpacity:0.4 };
+                    },
+                    onEachFeature: function(feature, layer){
                         if(feature.properties){
                             let popup = "";
                             for(let key in feature.properties){
@@ -121,11 +128,6 @@ async function loadFiles(){
     } finally {
         loadingDiv.style.display = "none";
     }
-}
-
-// Download
-function downloadFile(url){
-    window.open(url,"_blank");
 }
 
 // Zoom per layer
