@@ -19,7 +19,12 @@ body { margin:0; font-family:Arial; }
     border-left:1px solid #ccc;
     background:#f4f4f4;
 }
-.file-item { margin-bottom:15px; padding:8px; background:white; border-radius:6px; }
+.file-item {
+    margin-bottom:15px;
+    padding:8px;
+    background:white;
+    border-radius:6px;
+}
 .file-item button {
     margin-top:5px;
     margin-right:5px;
@@ -44,7 +49,6 @@ body { margin:0; font-family:Arial; }
 <script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
 
 <script>
-
 // ================= MAP =================
 const map = L.map('map').setView([-2.5,118],5);
 
@@ -61,7 +65,6 @@ const OWNER = "agenkkkk";
 const REPO = "GSN";
 const FOLDER = "shp";
 const BRANCH = "main";
-
 const markerImage = "./img/point-of-interest.png";
 
 // ================= UTIL =================
@@ -89,7 +92,6 @@ async function loadFiles(){
     const loadingDiv = document.getElementById("loading");
 
     try{
-
         const apiUrl =
         `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
 
@@ -121,15 +123,13 @@ async function loadFiles(){
 
             const layer = L.geoJSON(data,{
                 style:{ color:color, weight:2, fillOpacity:0.4 },
-                pointToLayer:function(feature,latlng){
-                    return L.circleMarker(latlng,{
-                        radius:6,
-                        fillColor:color,
-                        color:color,
-                        weight:1,
-                        fillOpacity:0.8
-                    });
-                }
+                pointToLayer:(f,latlng)=>L.circleMarker(latlng,{
+                    radius:6,
+                    fillColor:color,
+                    color:color,
+                    weight:1,
+                    fillOpacity:0.8
+                })
             }).addTo(map);
 
             layerStore[name] = layer;
@@ -139,35 +139,33 @@ async function loadFiles(){
             let baseSize = Math.max(20,map.getZoom()*2);
 
             const marker =
-            L.marker(center,{ icon:createIcon(baseSize) })
-            .addTo(map);
+            L.marker(center,{ icon:createIcon(baseSize) }).addTo(map);
 
+            // Tooltip hanya saat hover
             marker.bindTooltip(displayName,{
                 direction:"top",
-                offset:[0,-20]
+                offset:[0,-20],
+                permanent:false
             });
 
-            // Hover effect
-            marker.on("mouseover",function(){
+            marker.on("mouseover",()=>{
                 marker.setIcon(createIcon(baseSize*1.5));
             });
 
-            marker.on("mouseout",function(){
+            marker.on("mouseout",()=>{
                 marker.setIcon(createIcon(baseSize));
             });
 
-            // Click zoom
-            marker.on("click",function(){
+            // Klik marker → zoom layer (tanpa tooltip)
+            marker.on("click",()=>{
                 map.fitBounds(layer.getBounds());
             });
 
             centerMarkers[name] = marker;
         }
 
-        // Fit semua layer
-        const allLayers = Object.values(layerStore);
-        if(allLayers.length>0){
-            const group = L.featureGroup(allLayers);
+        const group = L.featureGroup(Object.values(layerStore));
+        if(group.getLayers().length){
             map.fitBounds(group.getBounds());
         }
 
@@ -186,10 +184,8 @@ function viewLayer(name){
         map.fitBounds(layerStore[name].getBounds());
 
         const marker = centerMarkers[name];
-        marker.openTooltip();
-
         const zoom = map.getZoom();
-        const baseSize = Math.max(40,zoom*2);
+        const baseSize = Math.max(20,zoom*2);
         const bigSize = baseSize*1.6;
 
         marker.setIcon(createIcon(bigSize));
@@ -200,25 +196,17 @@ function viewLayer(name){
     }
 }
 
-// ================= UPDATE SIZE ON ZOOM =================
-function updateMarkerSize(){
+// ================= UPDATE MARKER SIZE =================
+map.on("zoomend",()=>{
     const zoom = map.getZoom();
-    const size = Math.max(40,zoom*2);
+    const size = Math.max(20,zoom*2);
 
-    for(let key in centerMarkers){
-        centerMarkers[key].setIcon(createIcon(size));
+    for(let k in centerMarkers){
+        centerMarkers[k].setIcon(createIcon(size));
     }
-}
-
-map.on("zoomend",updateMarkerSize);
+});
 
 loadFiles();
-
 </script>
 </body>
 </html>
-
-
-
-
-
