@@ -73,10 +73,11 @@ async function loadFiles(){
             const name = file.name;
             const url = file.download_url;
 
-            // Sidebar item
+            // Sidebar item dengan tombol download dan zoom
             const div = document.createElement("div");
             div.className = "file-item";
             div.innerHTML = `<b>${name}</b>
+                             <button onclick="downloadFile('${url}')">Download</button>
                              <button onclick="zoomLayer('${name}')">Zoom</button>`;
             fileListDiv.appendChild(div);
 
@@ -87,15 +88,21 @@ async function loadFiles(){
                 const data = await shp(arrayBuffer);
                 const color = stringToColor(name);
 
-                // Fungsi untuk style layer
+                // GeoJSON layer
                 const layer = L.geoJSON(data, {
-                    pointToLayer: function(feature, latlng){
-                        // Jika point, buat marker dengan warna sama
-                        return L.circleMarker(latlng, { radius:6, fillColor: color, color: color, weight:1, fillOpacity:0.8 });
-                    },
                     style: function(feature){
-                        // Jika polygon atau line, beri style warna
-                        return { color: color, weight:2, fillOpacity:0.4 };
+                        // Polygon / Line
+                        return { color: color, weight: 2, fillOpacity: 0.4 };
+                    },
+                    pointToLayer: function(feature, latlng){
+                        // Point
+                        return L.circleMarker(latlng, {
+                            radius: 6,
+                            fillColor: color,
+                            color: color,
+                            weight: 1,
+                            fillOpacity: 0.8
+                        });
                     },
                     onEachFeature: function(feature, layer){
                         if(feature.properties){
@@ -115,7 +122,7 @@ async function loadFiles(){
             }
         }
 
-        // Fit ke semua layer sekaligus
+        // Fit ke semua layer
         const allLayers = Object.values(layerStore);
         if(allLayers.length>0){
             const group = L.featureGroup(allLayers);
@@ -130,7 +137,12 @@ async function loadFiles(){
     }
 }
 
-// Zoom per layer
+// Download file
+function downloadFile(url){
+    window.open(url,"_blank");
+}
+
+// Zoom layer
 function zoomLayer(name){
     if(layerStore[name]){
         map.fitBounds(layerStore[name].getBounds());
