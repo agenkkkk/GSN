@@ -7,20 +7,18 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
-body {
+body{
     margin:0;
     font-family:Arial, sans-serif;
     overflow:hidden;
 }
 
-/* ===== MAP ===== */
-#map {
+#map{
     height:100vh;
     width:100%;
 }
 
-/* ===== SIDEBAR ===== */
-#sidebar {
+#sidebar{
     position:absolute;
     top:0;
     right:0;
@@ -32,15 +30,15 @@ body {
     box-sizing:border-box;
     overflow:auto;
     transform:translateX(100%);
-    transition:0.3s ease;
+    transition:0.3s;
     z-index:1000;
 }
 
-#sidebar.active {
+#sidebar.active{
     transform:translateX(0);
 }
 
-#toggleBtn {
+#toggleBtn{
     position:absolute;
     top:15px;
     right:15px;
@@ -54,8 +52,7 @@ body {
     box-shadow:0 2px 6px rgba(0,0,0,0.2);
 }
 
-/* ===== LIST ITEM ===== */
-.file-item {
+.file-item{
     margin-bottom:15px;
     padding:10px;
     background:white;
@@ -63,7 +60,7 @@ body {
     box-shadow:0 1px 4px rgba(0,0,0,0.1);
 }
 
-.file-item button {
+.file-item button{
     margin-top:5px;
     margin-right:5px;
     padding:6px 10px;
@@ -73,22 +70,12 @@ body {
     background:#2c7be5;
     color:white;
 }
-
-.file-item button:hover {
-    opacity:0.85;
-}
-
-#loading {
-    font-weight:bold;
-    margin-bottom:10px;
-}
 </style>
 </head>
 
 <body>
 
 <div id="map"></div>
-
 <button id="toggleBtn">☰</button>
 
 <div id="sidebar">
@@ -126,7 +113,7 @@ L.tileLayer(
     maxZoom:18
 }).addTo(map);
 
-// ================= TOGGLE SIDEBAR =================
+// ================= SIDEBAR TOGGLE =================
 document.getElementById("toggleBtn")
 .addEventListener("click",()=>{
     document.getElementById("sidebar")
@@ -135,18 +122,18 @@ document.getElementById("toggleBtn")
 
 // ================= UTIL =================
 function stringToColor(str){
-    let hash = 0;
+    let hash=0;
     for(let i=0;i<str.length;i++){
-        hash = str.charCodeAt(i) + ((hash<<5)-hash);
+        hash=str.charCodeAt(i)+((hash<<5)-hash);
     }
-    let color = (hash & 0x00FFFFFF)
+    let color=(hash & 0x00FFFFFF)
     .toString(16).toUpperCase();
-    return "#" + "000000".substring(0,6-color.length) + color;
+    return "#"+"000000".substring(0,6-color.length)+color;
 }
 
 function createIcon(size){
     return L.icon({
-        iconUrl: markerImage,
+        iconUrl:markerImage,
         iconSize:[size,size],
         iconAnchor:[size/2,size]
     });
@@ -155,34 +142,26 @@ function createIcon(size){
 // ================= LOAD FILES =================
 async function loadFiles(){
 
-    const fileListDiv =
-    document.getElementById("fileList");
-
-    const loadingDiv =
-    document.getElementById("loading");
+    const fileListDiv=document.getElementById("fileList");
+    const loadingDiv=document.getElementById("loading");
 
     try{
 
-        const apiUrl =
+        const apiUrl=
         `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
 
-        const response = await fetch(apiUrl);
-        const files = await response.json();
-        const shpFiles =
-        files.filter(f => f.name.endsWith(".zip"));
+        const response=await fetch(apiUrl);
+        const files=await response.json();
+        const shpFiles=files.filter(f=>f.name.endsWith(".zip"));
 
         for(const file of shpFiles){
 
-            const name = file.name;
-            const displayName =
-            name.replace(".zip","");
-            const url = file.download_url;
-            const color =
-            stringToColor(name);
+            const name=file.name;
+            const displayName=name.replace(".zip","");
+            const url=file.download_url;
+            const color=stringToColor(name);
 
-            // ===== Sidebar =====
-            const div =
-            document.createElement("div");
+            const div=document.createElement("div");
             div.className="file-item";
             div.innerHTML=`
                 <b>${displayName}</b><br>
@@ -191,15 +170,11 @@ async function loadFiles(){
             `;
             fileListDiv.appendChild(div);
 
-            // ===== Load SHP =====
-            const res = await fetch(url);
-            const arrayBuffer =
-            await res.arrayBuffer();
-            const data =
-            await shp(arrayBuffer);
+            const res=await fetch(url);
+            const arrayBuffer=await res.arrayBuffer();
+            const data=await shp(arrayBuffer);
 
-            const layer =
-            L.geoJSON(data,{
+            const layer=L.geoJSON(data,{
                 style:{
                     color:color,
                     weight:2,
@@ -209,49 +184,42 @@ async function loadFiles(){
 
             layerStore[name]=layer;
 
-            // ===== Gabungkan bounds =====
             if(!globalBounds){
-                globalBounds =
-                layer.getBounds();
+                globalBounds=layer.getBounds();
             }else{
-                globalBounds
-                .extend(layer.getBounds());
+                globalBounds.extend(layer.getBounds());
             }
 
-            // ===== Center Marker =====
-            const center =
-            layer.getBounds().getCenter();
+            const center=layer.getBounds().getCenter();
+            const baseSize=Math.max(40,map.getZoom()*2);
 
-            const baseSize =
-            Math.max(40,map.getZoom()*2);
-
-            const marker =
-            L.marker(center,{
+            const marker=L.marker(center,{
                 icon:createIcon(baseSize)
             }).addTo(map);
 
             marker.on("mouseover",()=>{
-                marker.setIcon(
-                createIcon(baseSize*1.5));
+                marker.setIcon(createIcon(baseSize*1.5));
             });
 
             marker.on("mouseout",()=>{
-                marker.setIcon(
-                createIcon(baseSize));
+                marker.setIcon(createIcon(baseSize));
             });
 
             marker.on("click",()=>{
-                map.fitBounds(
-                layer.getBounds());
+                map.fitBounds(layer.getBounds());
             });
 
             centerMarkers[name]=marker;
         }
 
-        // ===== BATASI AREA & ZOOM =====
+        // 🔥 HANYA BATASI ZOOM OUT
         if(globalBounds){
-            map.fitBounds(globalBounds);
-            map.setMaxBounds(globalBounds);
+
+            const paddedBounds = globalBounds.pad(0.05);
+
+            map.fitBounds(paddedBounds);
+
+            // Batasi zoom out saja
             map.setMinZoom(map.getZoom());
         }
 
@@ -267,39 +235,27 @@ function viewLayer(name){
 
     if(layerStore[name]){
 
-        map.fitBounds(
-        layerStore[name].getBounds());
+        map.fitBounds(layerStore[name].getBounds());
 
-        const marker =
-        centerMarkers[name];
+        const marker=centerMarkers[name];
+        const zoom=map.getZoom();
+        const baseSize=Math.max(40,zoom*2);
+        const bigSize=baseSize*1.6;
 
-        const zoom =
-        map.getZoom();
-
-        const baseSize =
-        Math.max(40,zoom*2);
-
-        const bigSize =
-        baseSize*1.6;
-
-        marker.setIcon(
-        createIcon(bigSize));
+        marker.setIcon(createIcon(bigSize));
 
         setTimeout(()=>{
-            marker.setIcon(
-            createIcon(baseSize));
+            marker.setIcon(createIcon(baseSize));
         },600);
     }
 }
 
-// ================= UPDATE MARKER SIZE =================
 map.on("zoomend",()=>{
-    const zoom = map.getZoom();
-    const size = Math.max(40,zoom*2);
+    const zoom=map.getZoom();
+    const size=Math.max(40,zoom*2);
 
     for(let k in centerMarkers){
-        centerMarkers[k]
-        .setIcon(createIcon(size));
+        centerMarkers[k].setIcon(createIcon(size));
     }
 });
 
