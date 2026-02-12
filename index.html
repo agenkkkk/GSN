@@ -144,7 +144,7 @@ function zoomLayer(name){
 // ================= UPDATE MARKER SIZE =================
 function updateMarkerSize() {
     const zoom = map.getZoom();
-    const size = Math.max(30, zoom * 2);
+    const size = Math.max(50, zoom * 4);
 
     for(let key in centerMarkers){
         const icon = L.icon({
@@ -165,3 +165,4 @@ loadFiles();
 
 
 coba ubah script agar marker bisa muncul
+
