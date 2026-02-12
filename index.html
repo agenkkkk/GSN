@@ -73,10 +73,11 @@ async function loadFiles(){
             const name = file.name;
             const url = file.download_url;
 
-            // Sidebar item tanpa tombol download
+            // Sidebar item
             const div = document.createElement("div");
             div.className = "file-item";
             div.innerHTML = `<b>${name}</b>
+                             <button onclick="downloadFile('${url}')">Download</button>
                              <button onclick="zoomLayer('${name}')">Zoom</button>`;
             fileListDiv.appendChild(div);
 
@@ -120,6 +121,11 @@ async function loadFiles(){
     } finally {
         loadingDiv.style.display = "none";
     }
+}
+
+// Download
+function downloadFile(url){
+    window.open(url,"_blank");
 }
 
 // Zoom per layer
