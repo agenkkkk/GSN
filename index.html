@@ -14,13 +14,18 @@ body { margin:0; font-family:Arial; }
     float:left;
     height:100vh;
     overflow:auto;
-    padding:10px;
+    padding:15px;
     box-sizing:border-box;
     border-left:1px solid #ccc;
-    background:#f8f8f8;
+    background:#f4f4f4;
 }
-.file-item { margin-bottom:10px; }
-.file-item button { margin-left:5px; }
+.file-item { margin-bottom:15px; padding:8px; background:white; border-radius:6px; }
+.file-item button {
+    margin-top:5px;
+    margin-right:5px;
+    padding:5px 8px;
+    cursor:pointer;
+}
 #loading { font-weight:bold; margin-bottom:10px; }
 </style>
 </head>
@@ -51,15 +56,15 @@ L.tileLayer(
 let layerStore = {};
 let centerMarkers = {};
 
-// ================= CONFIG GITHUB =================
-const OWNER = "agenkkkk";   // GANTI jika perlu
-const REPO = "GSN";         // GANTI jika perlu
+// ================= CONFIG =================
+const OWNER = "agenkkkk";
+const REPO = "GSN";
 const FOLDER = "shp";
 const BRANCH = "main";
 
 const markerImage = "./img/point-of-interest.png";
 
-// ================= COLOR RANDOM =================
+// ================= UTIL =================
 function stringToColor(str){
     let hash = 0;
     for(let i=0;i<str.length;i++){
@@ -69,7 +74,6 @@ function stringToColor(str){
     return "#" + "00000".substring(0,6-color.length) + color;
 }
 
-// ================= ICON FUNCTION =================
 function createIcon(size){
     return L.icon({
         iconUrl: markerImage,
@@ -78,22 +82,19 @@ function createIcon(size){
     });
 }
 
-// ================= LOAD FILE =================
+// ================= LOAD FILES =================
 async function loadFiles(){
 
     const fileListDiv = document.getElementById("fileList");
     const loadingDiv = document.getElementById("loading");
 
-    fileListDiv.innerHTML = "";
-    loadingDiv.style.display = "block";
-
     try{
+
         const apiUrl =
         `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
 
         const response = await fetch(apiUrl);
         const files = await response.json();
-
         const shpFiles = files.filter(f => f.name.endsWith(".zip"));
 
         for(const file of shpFiles){
@@ -106,10 +107,11 @@ async function loadFiles(){
             // ===== Sidebar =====
             const div = document.createElement("div");
             div.className = "file-item";
-            div.innerHTML =
-                `<b>${displayName}</b>
-                 <button onclick="window.open('${url}','_blank')">
-                 Download</button>`;
+            div.innerHTML = `
+                <b>${displayName}</b><br>
+                <button onclick="viewLayer('${name}')">View</button>
+                <button onclick="window.open('${url}','_blank')">Download</button>
+            `;
             fileListDiv.appendChild(div);
 
             // ===== Load SHP =====
@@ -118,11 +120,7 @@ async function loadFiles(){
             const data = await shp(arrayBuffer);
 
             const layer = L.geoJSON(data,{
-                style:{
-                    color:color,
-                    weight:2,
-                    fillOpacity:0.4
-                },
+                style:{ color:color, weight:2, fillOpacity:0.4 },
                 pointToLayer:function(feature,latlng){
                     return L.circleMarker(latlng,{
                         radius:6,
@@ -144,7 +142,6 @@ async function loadFiles(){
             L.marker(center,{ icon:createIcon(baseSize) })
             .addTo(map);
 
-            // Tooltip
             marker.bindTooltip(displayName,{
                 direction:"top",
                 offset:[0,-20]
@@ -175,13 +172,35 @@ async function loadFiles(){
         }
 
     }catch(err){
-        console.error("Error:",err);
+        console.error(err);
     }finally{
-        loadingDiv.style.display = "none";
+        loadingDiv.style.display="none";
     }
 }
 
-// ================= UPDATE MARKER SIZE =================
+// ================= VIEW BUTTON =================
+function viewLayer(name){
+
+    if(layerStore[name]){
+
+        map.fitBounds(layerStore[name].getBounds());
+
+        const marker = centerMarkers[name];
+        marker.openTooltip();
+
+        const zoom = map.getZoom();
+        const baseSize = Math.max(35,zoom*2);
+        const bigSize = baseSize*1.6;
+
+        marker.setIcon(createIcon(bigSize));
+
+        setTimeout(()=>{
+            marker.setIcon(createIcon(baseSize));
+        },600);
+    }
+}
+
+// ================= UPDATE SIZE ON ZOOM =================
 function updateMarkerSize(){
     const zoom = map.getZoom();
     const size = Math.max(20,zoom*2);
