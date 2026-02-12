@@ -1,31 +1,3 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<title>WebGIS SHP GitHub</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>
-body { margin:0; font-family:Arial; }
-#map { height:100vh; width: 75%; float:left; }
-#sidebar { width:25%; float:left; height:100vh; overflow:auto; padding:10px; box-sizing:border-box; border-left:1px solid #ccc; }
-#sidebar h2 { font-size:16px; margin-top:0; }
-.file-item { margin-bottom:10px; }
-.file-item button { margin-left:5px; }
-#loading { font-weight:bold; margin-bottom:10px; }
-</style>
-</head>
-<body>
-
-<div id="map"></div>
-<div id="sidebar">
-  <h2>Daftar File SHP</h2>
-  <div id="loading">Memuat file...</div>
-  <div id="fileList"></div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
-
 <script>
 // ================= MAP =================
 const map = L.map('map').setView([-2.5489,118.0149],5);
@@ -43,8 +15,6 @@ const OWNER = "agenkkkk";
 const REPO = "GSN";
 const FOLDER = "shp";
 const BRANCH = "main";
-
-// 🔥 gunakan path relatif aman
 const markerImage = "./img/point-of-interest.png";
 
 // ================= UTILS =================
@@ -55,6 +25,41 @@ function stringToColor(str){
     }
     let color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
     return "#" + "00000".substring(0,6-color.length) + color;
+}
+
+// 🔥 Fungsi centroid universal (untuk semua tipe geometry)
+function getCentroidFromGeoJSON(data){
+    let latSum = 0;
+    let lngSum = 0;
+    let count = 0;
+
+    data.features.forEach(f => {
+        const type = f.geometry.type;
+        const coords = f.geometry.coordinates;
+
+        function processCoords(arr){
+            arr.forEach(c => {
+                if(typeof c[0] === "number"){
+                    lngSum += c[0];
+                    latSum += c[1];
+                    count++;
+                } else {
+                    processCoords(c);
+                }
+            });
+        }
+
+        if(type === "Point"){
+            lngSum += coords[0];
+            latSum += coords[1];
+            count++;
+        } else {
+            processCoords(coords);
+        }
+    });
+
+    if(count === 0) return null;
+    return [latSum/count, lngSum/count];
 }
 
 // ================= LOAD FILES =================
@@ -68,7 +73,6 @@ async function loadFiles(){
         const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
         const response = await fetch(apiUrl);
         const files = await response.json();
-
         const shpFiles = files.filter(f => f.name.endsWith(".zip"));
 
         for(const file of shpFiles){
@@ -103,17 +107,19 @@ async function loadFiles(){
 
                 layerStore[name] = layer;
 
-                // 🔥 Ambil center dari bounds (lebih aman)
-                const center = layer.getBounds().getCenter();
+                // 🔥 Ambil centroid akurat
+                const center = getCentroidFromGeoJSON(data);
 
-                const icon = L.icon({
-                    iconUrl: markerImage,
-                    iconSize: [35,35],
-                    iconAnchor: [17,35]
-                });
+                if(center){
+                    const icon = L.icon({
+                        iconUrl: markerImage,
+                        iconSize: [70,70],      // 🔥 diperbesar
+                        iconAnchor: [35,70]
+                    });
 
-                const marker = L.marker(center, { icon: icon }).addTo(map);
-                centerMarkers[name] = marker;
+                    const marker = L.marker(center, { icon: icon }).addTo(map);
+                    centerMarkers[name] = marker;
+                }
 
             } catch(err){
                 console.error("Gagal load SHP:", name, err);
@@ -144,7 +150,7 @@ function zoomLayer(name){
 // ================= UPDATE MARKER SIZE =================
 function updateMarkerSize() {
     const zoom = map.getZoom();
-    const size = Math.max(50, zoom * 4);
+    const size = Math.max(60, zoom * 5);
 
     for(let key in centerMarkers){
         const icon = L.icon({
@@ -160,9 +166,3 @@ map.on('zoomend', updateMarkerSize);
 
 loadFiles();
 </script>
-</body>
-</html>
-
-
-coba ubah script agar marker bisa muncul
-
