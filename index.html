@@ -44,7 +44,6 @@ const BRANCH = "main";    // branch repo
 
 // ================= UTILS =================
 function stringToColor(str){
-    // Warna konsisten per file
     let hash = 0;
     for(let i=0;i<str.length;i++){ hash = str.charCodeAt(i) + ((hash<<5)-hash); }
     let color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
@@ -62,6 +61,12 @@ async function loadFiles(){
         const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
         const response = await fetch(apiUrl);
         const files = await response.json();
+
+        if(!Array.isArray(files)){
+            fileListDiv.innerHTML = "Gagal load daftar file.";
+            return;
+        }
+
         const shpFiles = files.filter(f => f.name.endsWith(".zip"));
 
         for(const file of shpFiles){
@@ -103,7 +108,7 @@ async function loadFiles(){
             }
         }
 
-        // Zoom ke semua layer sekaligus
+        // Fit ke semua layer sekaligus
         const allLayers = Object.values(layerStore);
         if(allLayers.length>0){
             const group = L.featureGroup(allLayers);
