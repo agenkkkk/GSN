@@ -189,7 +189,7 @@ function viewLayer(name){
         marker.openTooltip();
 
         const zoom = map.getZoom();
-        const baseSize = Math.max(40,zoom*4);
+        const baseSize = Math.max(40,zoom*2);
         const bigSize = baseSize*1.6;
 
         marker.setIcon(createIcon(bigSize));
@@ -217,6 +217,7 @@ loadFiles();
 </script>
 </body>
 </html>
+
 
 
 
