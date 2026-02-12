@@ -3,51 +3,63 @@
 <head>
 <meta charset="UTF-8">
 <title>WebGIS SHP GitHub</title>
+
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
 <style>
 body { margin:0; font-family:Arial; }
-#map { height:100vh; width: 75%; float:left; }
-#sidebar { width:25%; float:left; height:100vh; overflow:auto; padding:10px; box-sizing:border-box; border-left:1px solid #ccc; }
-#sidebar h2 { font-size:16px; margin-top:0; }
+#map { height:100vh; width:75%; float:left; }
+#sidebar {
+    width:25%;
+    float:left;
+    height:100vh;
+    overflow:auto;
+    padding:10px;
+    box-sizing:border-box;
+    border-left:1px solid #ccc;
+    background:#f8f8f8;
+}
 .file-item { margin-bottom:10px; }
 .file-item button { margin-left:5px; }
 #loading { font-weight:bold; margin-bottom:10px; }
 </style>
 </head>
+
 <body>
 
 <div id="map"></div>
+
 <div id="sidebar">
-  <h2>Daftar File SHP</h2>
-  <div id="loading">Memuat file...</div>
-  <div id="fileList"></div>
+    <h2>Daftar File SHP</h2>
+    <div id="loading">Memuat file...</div>
+    <div id="fileList"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
 
 <script>
+
 // ================= MAP =================
-const map = L.map('map').setView([-2.5489,118.0149],5);
+const map = L.map('map').setView([-2.5,118],5);
 
 L.tileLayer(
-  'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-  { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'] }
+'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+{ maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'] }
 ).addTo(map);
 
 let layerStore = {};
 let centerMarkers = {};
 
-// ================= CONFIG =================
-const OWNER = "agenkkkk";
-const REPO = "GSN";
+// ================= CONFIG GITHUB =================
+const OWNER = "agenkkkk";   // GANTI jika perlu
+const REPO = "GSN";         // GANTI jika perlu
 const FOLDER = "shp";
 const BRANCH = "main";
 
-// 🔥 gunakan path relatif aman
 const markerImage = "./img/point-of-interest.png";
 
-// ================= UTILS =================
+// ================= COLOR RANDOM =================
 function stringToColor(str){
     let hash = 0;
     for(let i=0;i<str.length;i++){
@@ -57,69 +69,105 @@ function stringToColor(str){
     return "#" + "00000".substring(0,6-color.length) + color;
 }
 
-// ================= LOAD FILES =================
+// ================= ICON FUNCTION =================
+function createIcon(size){
+    return L.icon({
+        iconUrl: markerImage,
+        iconSize: [size,size],
+        iconAnchor: [size/2,size]
+    });
+}
+
+// ================= LOAD FILE =================
 async function loadFiles(){
+
     const fileListDiv = document.getElementById("fileList");
     const loadingDiv = document.getElementById("loading");
+
     fileListDiv.innerHTML = "";
     loadingDiv.style.display = "block";
 
     try{
-        const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
+        const apiUrl =
+        `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
+
         const response = await fetch(apiUrl);
         const files = await response.json();
 
         const shpFiles = files.filter(f => f.name.endsWith(".zip"));
 
         for(const file of shpFiles){
+
             const name = file.name;
+            const displayName = name.replace(".zip","");
             const url = file.download_url;
             const color = stringToColor(name);
 
+            // ===== Sidebar =====
             const div = document.createElement("div");
             div.className = "file-item";
-            div.innerHTML = `<b>${name}</b>
-                             <button onclick="downloadFile('${url}')">Download</button>
-                             <button onclick="zoomLayer('${name}')">Zoom</button>`;
+            div.innerHTML =
+                `<b>${displayName}</b>
+                 <button onclick="window.open('${url}','_blank')">
+                 Download</button>`;
             fileListDiv.appendChild(div);
 
-            try{
-                const res = await fetch(url);
-                const arrayBuffer = await res.arrayBuffer();
-                const data = await shp(arrayBuffer);
+            // ===== Load SHP =====
+            const res = await fetch(url);
+            const arrayBuffer = await res.arrayBuffer();
+            const data = await shp(arrayBuffer);
 
-                const layer = L.geoJSON(data, {
-                    style: { color: color, weight:2, fillOpacity:0.4 },
-                    pointToLayer: function(feature, latlng){
-                        return L.circleMarker(latlng, {
-                            radius: 6,
-                            fillColor: color,
-                            color: color,
-                            weight: 1,
-                            fillOpacity: 0.8
-                        });
-                    }
-                }).addTo(map);
+            const layer = L.geoJSON(data,{
+                style:{
+                    color:color,
+                    weight:2,
+                    fillOpacity:0.4
+                },
+                pointToLayer:function(feature,latlng){
+                    return L.circleMarker(latlng,{
+                        radius:6,
+                        fillColor:color,
+                        color:color,
+                        weight:1,
+                        fillOpacity:0.8
+                    });
+                }
+            }).addTo(map);
 
-                layerStore[name] = layer;
+            layerStore[name] = layer;
 
-                // 🔥 Ambil center dari bounds (lebih aman)
-                const center = layer.getBounds().getCenter();
+            // ===== Center Marker =====
+            const center = layer.getBounds().getCenter();
+            let baseSize = Math.max(20,map.getZoom()*2);
 
-                const icon = L.icon({
-                    iconUrl: markerImage,
-                    iconSize: [35,35],
-                    iconAnchor: [17,35]
-                });
+            const marker =
+            L.marker(center,{ icon:createIcon(baseSize) })
+            .addTo(map);
 
-                const marker = L.marker(center, { icon: icon }).addTo(map);
-                centerMarkers[name] = marker;
+            // Tooltip
+            marker.bindTooltip(displayName,{
+                direction:"top",
+                offset:[0,-20]
+            });
 
-            } catch(err){
-                console.error("Gagal load SHP:", name, err);
-            }
+            // Hover effect
+            marker.on("mouseover",function(){
+                marker.setIcon(createIcon(baseSize*1.5));
+            });
+
+            marker.on("mouseout",function(){
+                marker.setIcon(createIcon(baseSize));
+            });
+
+            // Click zoom
+            marker.on("click",function(){
+                map.fitBounds(layer.getBounds());
+            });
+
+            centerMarkers[name] = marker;
         }
 
+        // Fit semua layer
         const allLayers = Object.values(layerStore);
         if(allLayers.length>0){
             const group = L.featureGroup(allLayers);
@@ -127,41 +175,26 @@ async function loadFiles(){
         }
 
     }catch(err){
-        console.error("Gagal ambil daftar file:", err);
-    } finally {
+        console.error("Error:",err);
+    }finally{
         loadingDiv.style.display = "none";
     }
 }
 
-function downloadFile(url){ window.open(url,"_blank"); }
-
-function zoomLayer(name){
-    if(layerStore[name]){
-        map.fitBounds(layerStore[name].getBounds());
-    }
-}
-
 // ================= UPDATE MARKER SIZE =================
-function updateMarkerSize() {
+function updateMarkerSize(){
     const zoom = map.getZoom();
-    const size = Math.max(20, zoom * 2);
+    const size = Math.max(20,zoom*2);
 
     for(let key in centerMarkers){
-        const icon = L.icon({
-            iconUrl: markerImage,
-            iconSize: [size,size],
-            iconAnchor: [size/2,size]
-        });
-        centerMarkers[key].setIcon(icon);
+        centerMarkers[key].setIcon(createIcon(size));
     }
 }
 
-map.on('zoomend', updateMarkerSize);
+map.on("zoomend",updateMarkerSize);
 
 loadFiles();
+
 </script>
 </body>
 </html>
-
-
-
