@@ -189,7 +189,7 @@ function viewLayer(name){
         marker.openTooltip();
 
         const zoom = map.getZoom();
-        const baseSize = Math.max(35,zoom*4);
+        const baseSize = Math.max(40,zoom*4);
         const bigSize = baseSize*1.6;
 
         marker.setIcon(createIcon(bigSize));
@@ -203,7 +203,7 @@ function viewLayer(name){
 // ================= UPDATE SIZE ON ZOOM =================
 function updateMarkerSize(){
     const zoom = map.getZoom();
-    const size = Math.max(50,zoom*2);
+    const size = Math.max(40,zoom*2);
 
     for(let key in centerMarkers){
         centerMarkers[key].setIcon(createIcon(size));
@@ -217,6 +217,7 @@ loadFiles();
 </script>
 </body>
 </html>
+
 
 
 
