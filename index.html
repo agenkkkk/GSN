@@ -35,19 +35,42 @@ L.tileLayer(
 ).addTo(map);
 
 let layerStore = {};
+let centerMarkers = {};
 
 // ================= CONFIG =================
 const OWNER = "agenkkkk"; // ganti dengan username GitHub-mu
 const REPO = "GSN";       // ganti dengan nama repo
 const FOLDER = "shp";     // folder tempat SHP .zip
 const BRANCH = "main";    // branch repo
+const markerImage = "/mnt/data/824466e5-4217-4fe9-9794-f11be02bd94d.png"; // image marker
 
 // ================= UTILS =================
 function stringToColor(str){
     let hash = 0;
-    for(let i=0;i<str.length;i++){ hash = str.charCodeAt(i) + ((hash<<5)-hash); }
+    for(let i=0;i<str.length;i++){
+        hash = str.charCodeAt(i) + ((hash<<5)-hash);
+    }
     let color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
     return "#" + "00000".substring(0,6-color.length) + color;
+}
+
+function getGeoJSONCenter(geojson){
+    let coords = [];
+    geojson.features.forEach(f => {
+        if(f.geometry.type === "Point"){
+            coords.push(f.geometry.coordinates);
+        } else if(f.geometry.type === "Polygon"){
+            coords.push(f.geometry.coordinates[0]);
+        } else if(f.geometry.type === "MultiPolygon"){
+            coords.push(f.geometry.coordinates[0][0]);
+        } else if(f.geometry.type === "LineString"){
+            coords.push(f.geometry.coordinates);
+        }
+    });
+    coords = coords.flat(2);
+    const lng = coords.reduce((sum,c)=>sum+c[0],0)/coords.length;
+    const lat = coords.reduce((sum,c)=>sum+c[1],0)/coords.length;
+    return [lat,lng];
 }
 
 // ================= LOAD FILES =================
@@ -72,8 +95,8 @@ async function loadFiles(){
         for(const file of shpFiles){
             const name = file.name;
             const url = file.download_url;
+            const color = stringToColor(name);
 
-            // Sidebar item dengan tombol download dan zoom
             const div = document.createElement("div");
             div.className = "file-item";
             div.innerHTML = `<b>${name}</b>
@@ -81,21 +104,14 @@ async function loadFiles(){
                              <button onclick="zoomLayer('${name}')">Zoom</button>`;
             fileListDiv.appendChild(div);
 
-            // Load SHP
             try{
                 const res = await fetch(url);
                 const arrayBuffer = await res.arrayBuffer();
                 const data = await shp(arrayBuffer);
-                const color = stringToColor(name);
 
-                // GeoJSON layer
                 const layer = L.geoJSON(data, {
-                    style: function(feature){
-                        // Polygon / Line
-                        return { color: color, weight: 2, fillOpacity: 0.4 };
-                    },
+                    style: { color: color, weight:2, fillOpacity:0.4 },
                     pointToLayer: function(feature, latlng){
-                        // Point
                         return L.circleMarker(latlng, {
                             radius: 6,
                             fillColor: color,
@@ -117,12 +133,22 @@ async function loadFiles(){
 
                 layerStore[name] = layer;
 
+                // Tambahkan marker di center
+                const center = getGeoJSONCenter(data);
+                const marker = L.marker(center, {
+                    icon: L.icon({
+                        iconUrl: markerImage,
+                        iconSize: [30,30],
+                        iconAnchor: [15,30]
+                    })
+                }).addTo(map);
+                centerMarkers[name] = marker;
+
             } catch(err){
                 console.error("Gagal load SHP:", name, err);
             }
         }
 
-        // Fit ke semua layer
         const allLayers = Object.values(layerStore);
         if(allLayers.length>0){
             const group = L.featureGroup(allLayers);
@@ -137,21 +163,33 @@ async function loadFiles(){
     }
 }
 
-// Download file
-function downloadFile(url){
-    window.open(url,"_blank");
-}
-
-// Zoom layer
+function downloadFile(url){ window.open(url,"_blank"); }
 function zoomLayer(name){
     if(layerStore[name]){
         map.fitBounds(layerStore[name].getBounds());
     }
 }
 
-// Jalankan
-loadFiles();
-</script>
+// ================= UPDATE MARKER SIZE =================
+function updateMarkerSize() {
+    const zoom = map.getZoom();
+    const size = zoom * 2; // ukuran marker sesuai zoom
+    for(let key in centerMarkers){
+        const m = centerMarkers[key];
+        const icon = L.icon({
+            iconUrl: markerImage,
+            iconSize: [size,size],
+            iconAnchor: [size/2,size]
+        });
+        m.setIcon(icon);
+    }
+}
 
+map.on('zoomend', updateMarkerSize);
+
+// Jalankan
+loadFiles().then(updateMarkerSize);
+
+</script>
 </body>
 </html>
