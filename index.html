@@ -1,10 +1,9 @@
 <script>
 // ================= MAP =================
-const map = L.map('map').setView([-2.5489,118.0149],5);
-
+const map = L.map('map').setView([-2.5489, 118.0149], 5);
 L.tileLayer(
   'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-  { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'] }
+  { maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'] }
 ).addTo(map);
 
 let layerStore = {};
@@ -16,109 +15,113 @@ const REPO = "GSN";
 const FOLDER = "shp";
 const BRANCH = "main";
 
-// 🔥 Pakai URL GitHub Pages penuh
+// 🔥 PAKAI LINK GITHUB PAGES LANGSUNG
 const markerImage = "https://agenkkkk.github.io/GSN/img/point-of-interest.png";
 
-// ================= UTILS =================
 function stringToColor(str){
-    let hash = 0;
-    for(let i=0;i<str.length;i++){
-        hash = str.charCodeAt(i) + ((hash<<5)-hash);
-    }
-    let color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-    return "#" + "00000".substring(0,6-color.length) + color;
+  let hash = 0;
+  for(let i=0;i<str.length;i++){
+      hash = str.charCodeAt(i) + ((hash<<5)-hash);
+  }
+  let color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+  return "#" + "00000".substring(0,6-color.length) + color;
 }
 
 function getGeoJSONCenter(layer){
-    const bounds = layer.getBounds();
-    return bounds.getCenter();
+  const bounds = layer.getBounds();
+  return bounds.getCenter();
 }
 
-// ================= LOAD FILES =================
 async function loadFiles(){
-    const fileListDiv = document.getElementById("fileList");
-    const loadingDiv = document.getElementById("loading");
-    fileListDiv.innerHTML = "";
-    loadingDiv.style.display = "block";
+  const fileListDiv = document.getElementById("fileList");
+  const loadingDiv = document.getElementById("loading");
+  fileListDiv.innerHTML = "";
+  loadingDiv.style.display = "block";
 
-    try{
-        const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
-        const response = await fetch(apiUrl);
-        const files = await response.json();
+  try{
+    const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
+    const response = await fetch(apiUrl);
+    const files = await response.json();
+    const shpFiles = files.filter(f => f.name.endsWith(".zip"));
 
-        const shpFiles = files.filter(f => f.name.endsWith(".zip"));
+    for(const file of shpFiles){
+      const name = file.name;
+      const url = file.download_url;
+      const color = stringToColor(name);
 
-        for(const file of shpFiles){
-            const name = file.name;
-            const url = file.download_url;
-            const color = stringToColor(name);
+      const div = document.createElement("div");
+      div.className = "file-item";
+      div.innerHTML = `<b>${name}</b>
+                       <button onclick="downloadFile('${url}')">Download</button>
+                       <button onclick="zoomLayer('${name}')">Zoom</button>`;
+      fileListDiv.appendChild(div);
 
-            const div = document.createElement("div");
-            div.className = "file-item";
-            div.innerHTML = `<b>${name}</b>
-                             <button onclick="downloadFile('${url}')">Download</button>
-                             <button onclick="zoomLayer('${name}')">Zoom</button>`;
-            fileListDiv.appendChild(div);
+      try{
+        const res = await fetch(url);
+        const arrayBuffer = await res.arrayBuffer();
+        const data = await shp(arrayBuffer);
 
-            try{
-                const res = await fetch(url);
-                const arrayBuffer = await res.arrayBuffer();
-                const data = await shp(arrayBuffer);
+        const layer = L.geoJSON(data, {
+          style: { color: color, weight:2, fillOpacity:0.4 },
+          pointToLayer: function(feature, latlng){
+            return L.circleMarker(latlng, {
+              radius: 6,
+              fillColor: color,
+              color: color,
+              weight: 1,
+              fillOpacity: 0.8
+            });
+          }
+        }).addTo(map);
 
-                const layer = L.geoJSON(data, {
-                    style: { color: color, weight:2, fillOpacity:0.4 },
-                    pointToLayer: function(feature, latlng){
-                        return L.circleMarker(latlng, {
-                            radius: 6,
-                            fillColor: color,
-                            color: color,
-                            weight: 1,
-                            fillOpacity: 0.8
-                        });
-                    }
-                }).addTo(map);
+        layerStore[name] = layer;
 
-                layerStore[name] = layer;
+        const center = getGeoJSONCenter(layer);
+        const icon = L.icon({
+          iconUrl: markerImage,
+          iconSize: [35,35],
+          iconAnchor: [17,35]
+        });
+        const marker = L.marker(center, { icon: icon }).addTo(map);
+        centerMarkers[name] = marker;
 
-                // 🔥 Ambil center dari bounds layer (lebih akurat & aman)
-                const center = getGeoJSONCenter(layer);
-
-                const icon = L.icon({
-                    iconUrl: markerImage,
-                    iconSize: [35,35],
-                    iconAnchor: [17,35]
-                });
-
-                const marker = L.marker(center, { icon: icon }).addTo(map);
-                centerMarkers[name] = marker;
-
-            }catch(err){
-                console.error("Gagal load SHP:", name, err);
-            }
-        }
-
-        const allLayers = Object.values(layerStore);
-        if(allLayers.length>0){
-            const group = L.featureGroup(allLayers);
-            map.fitBounds(group.getBounds());
-        }
-
-    }catch(err){
-        console.error("Gagal ambil daftar file:", err);
-    } finally {
-        loadingDiv.style.display = "none";
+      } catch(err){
+        console.error("Gagal load SHP:", name, err);
+      }
     }
+
+    const allLayers = Object.values(layerStore);
+    if(allLayers.length > 0){
+      const group = L.featureGroup(allLayers);
+      map.fitBounds(group.getBounds());
+    }
+
+  } catch(err){
+    console.error("Gagal ambil daftar file:", err);
+  } finally {
+    loadingDiv.style.display = "none";
+  }
 }
 
-function downloadFile(url){ 
-    window.open(url,"_blank"); 
-}
-
+function downloadFile(url){ window.open(url, "_blank"); }
 function zoomLayer(name){
-    if(layerStore[name]){
-        map.fitBounds(layerStore[name].getBounds());
-    }
+  if(layerStore[name]) map.fitBounds(layerStore[name].getBounds());
 }
 
-// ================= UPDATE MARKER SIZE =================
-function updateMarkerSi
+function updateMarkerSize(){
+  const zoom = map.getZoom();
+  const size = Math.max(25, zoom * 2);
+  for(let key in centerMarkers){
+      const icon = L.icon({
+          iconUrl: markerImage,
+          iconSize: [size,size],
+          iconAnchor: [size/2,size]
+      });
+      centerMarkers[key].setIcon(icon);
+  }
+}
+
+map.on('zoomend', updateMarkerSize);
+
+loadFiles();
+</script>
