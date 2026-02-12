@@ -203,7 +203,7 @@ function viewLayer(name){
 // ================= UPDATE SIZE ON ZOOM =================
 function updateMarkerSize(){
     const zoom = map.getZoom();
-    const size = Math.max(20,zoom*2);
+    const size = Math.max(35,zoom*2);
 
     for(let key in centerMarkers){
         centerMarkers[key].setIcon(createIcon(size));
@@ -217,3 +217,4 @@ loadFiles();
 </script>
 </body>
 </html>
+
