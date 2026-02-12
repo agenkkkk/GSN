@@ -49,16 +49,6 @@ body { margin:0; font-family:Arial; }
 <script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
 
 <script>
-// ================= MAP =================
-const map = L.map('map').setView([-2.5,118],5);
-
-L.tileLayer(
-'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-{ maxZoom:10, subdomains:['mt0','mt1','mt2','mt3'] }
-).addTo(map);
-
-let layerStore = {};
-let centerMarkers = {};
 
 // ================= CONFIG =================
 const OWNER = "agenkkkk";
@@ -67,6 +57,23 @@ const FOLDER = "shp";
 const BRANCH = "main";
 const markerImage = "./img/point-of-interest.png";
 
+let layerStore = {};
+let centerMarkers = {};
+let globalBounds = null;
+
+// ================= MAP INIT =================
+const map = L.map('map', {
+    minZoom: 5,
+    maxZoom: 18
+}).setView([-2.5,118],5);
+
+L.tileLayer(
+'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+{
+    subdomains:['mt0','mt1','mt2','mt3'],
+    maxZoom:18
+}).addTo(map);
+
 // ================= UTIL =================
 function stringToColor(str){
     let hash = 0;
@@ -74,7 +81,7 @@ function stringToColor(str){
         hash = str.charCodeAt(i) + ((hash<<5)-hash);
     }
     let color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-    return "#" + "00000".substring(0,6-color.length) + color;
+    return "#" + "000000".substring(0,6-color.length) + color;
 }
 
 function createIcon(size){
@@ -92,6 +99,7 @@ async function loadFiles(){
     const loadingDiv = document.getElementById("loading");
 
     try{
+
         const apiUrl =
         `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
 
@@ -134,19 +142,19 @@ async function loadFiles(){
 
             layerStore[name] = layer;
 
+            // ===== Gabungkan bounds =====
+            if(!globalBounds){
+                globalBounds = layer.getBounds();
+            }else{
+                globalBounds.extend(layer.getBounds());
+            }
+
             // ===== Center Marker =====
             const center = layer.getBounds().getCenter();
-            let baseSize = Math.max(20,map.getZoom()*2);
+            const baseSize = Math.max(40,map.getZoom()*2);
 
             const marker =
             L.marker(center,{ icon:createIcon(baseSize) }).addTo(map);
-
-            // Tooltip hanya saat hover
-            marker.bindTooltip(displayName,{
-                direction:"top",
-                offset:[0,-20],
-                permanent:false
-            });
 
             marker.on("mouseover",()=>{
                 marker.setIcon(createIcon(baseSize*1.5));
@@ -156,7 +164,6 @@ async function loadFiles(){
                 marker.setIcon(createIcon(baseSize));
             });
 
-            // Klik marker → zoom layer (tanpa tooltip)
             marker.on("click",()=>{
                 map.fitBounds(layer.getBounds());
             });
@@ -164,9 +171,11 @@ async function loadFiles(){
             centerMarkers[name] = marker;
         }
 
-        const group = L.featureGroup(Object.values(layerStore));
-        if(group.getLayers().length){
-            map.fitBounds(group.getBounds());
+        // ===== FIT & BATASI AREA =====
+        if(globalBounds){
+            map.fitBounds(globalBounds);
+            map.setMaxBounds(globalBounds);
+            map.setMinZoom(map.getZoom()); // 🔥 zoom out tidak bisa melewati data
         }
 
     }catch(err){
@@ -185,7 +194,7 @@ function viewLayer(name){
 
         const marker = centerMarkers[name];
         const zoom = map.getZoom();
-        const baseSize = Math.max(20,zoom*2);
+        const baseSize = Math.max(40,zoom*2);
         const bigSize = baseSize*1.6;
 
         marker.setIcon(createIcon(bigSize));
@@ -207,8 +216,7 @@ map.on("zoomend",()=>{
 });
 
 loadFiles();
+
 </script>
 </body>
 </html>
-
-
