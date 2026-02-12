@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>WebGIS SHP GitHub</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+body { margin:0; font-family:Arial; }
+#map { height:100vh; width: 75%; float:left; }
+#sidebar { width:25%; float:left; height:100vh; overflow:auto; padding:10px; box-sizing:border-box; border-left:1px solid #ccc; }
+#sidebar h2 { font-size:16px; margin-top:0; }
+.file-item { margin-bottom:10px; }
+.file-item button { margin-left:5px; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="sidebar">
+  <h2>Daftar File SHP</h2>
+  <div id="fileList">Loading...</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
+
+<script>
+// ================= MAP =================
+const map = L.map('map').setView([-2.5489,118.0149],5);
+
+L.tileLayer(
+  'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+  { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'] }
+).addTo(map);
+
+let layerStore = {};
+
+// ================= CONFIG =================
+const OWNER = "agenkkkk"; // ganti dengan username GitHub-mu
+const REPO = "GSN";       // ganti dengan nama repo
+const FOLDER = "shp";     // folder tempat SHP .zip
+const BRANCH = "main";    // branch repo
+
+// ================= LOAD FILES =================
+async function loadFiles(){
+    const fileListDiv = document.getElementById("fileList");
+    fileListDiv.innerHTML = "Loading...";
+
+    try{
+        // Ambil daftar file via GitHub API
+        const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FOLDER}?ref=${BRANCH}`;
+        const response = await fetch(apiUrl);
+        const files = await response.json();
+
+        const shpFiles = files.filter(f => f.name.endsWith(".zip"));
+        fileListDiv.innerHTML = "";
+
+        for(const file of shpFiles){
+            const name = file.name;
+            const url = file.download_url;
+
+            // Tambah di sidebar
+            const div = document.createElement("div");
+            div.className = "file-item";
+            div.innerHTML = `<b>${name}</b>
+                             <button onclick="downloadFile('${url}')">Download</button>
+                             <button onclick="zoomLayer('${name}')">Zoom</button>`;
+            fileListDiv.appendChild(div);
+
+            // Load SHP
+            try{
+                const res = await fetch(url);
+                const arrayBuffer = await res.arrayBuffer();
+                const data = await shp(arrayBuffer);
+
+                const layer = L.geoJSON(data,{
+                    style:{ color:"#"+Math.floor(Math.random()*16777215).toString(16), weight:2 },
+                    onEachFeature: (feature, layer) => {
+                        if(feature.properties){
+                            let popup = "";
+                            for(let key in feature.properties){
+                                popup += `<b>${key}</b>: ${feature.properties[key]}<br>`;
+                            }
+                            layer.bindPopup(popup);
+                        }
+                    }
+                }).addTo(map);
+
+                layerStore[name] = layer;
+
+            }catch(err){
+                console.error("Gagal load SHP:", name, err);
+            }
+        }
+
+        // Zoom ke semua layer
+        const allLayers = Object.values(layerStore);
+        if(allLayers.length>0){
+            const group = L.featureGroup(allLayers);
+            map.fitBounds(group.getBounds());
+        }
+
+    }catch(err){
+        console.error("Gagal ambil daftar file:", err);
+        fileListDiv.innerHTML = "Gagal load daftar file.";
+    }
+}
+
+// Download
+function downloadFile(url){
+    window.open(url, "_blank");
+}
+
+// Zoom layer
+function zoomLayer(name){
+    if(layerStore[name]){
+        map.fitBounds(layerStore[name].getBounds());
+    }
+}
+
+// Jalankan load
+loadFiles();
+</script>
+
+</body>
+</html>
