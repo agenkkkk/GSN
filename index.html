@@ -99,10 +99,8 @@ const apiRoot=`https://api.github.com/repos/${repo}/contents/files?ref=${branch}
 
 const map=L.map('map').setView([-2,118],5);
 
-const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 const satellite=L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png');
-
-osm.addTo(map);
 
 document.getElementById("basemapSelect").onchange=function(){
 map.eachLayer(l=>map.removeLayer(l));
@@ -122,135 +120,136 @@ return await res.json();
 }
 
 async function loadRepo(){
+
 showLoading(true);
+
 const categories=await fetchJSON(apiRoot);
 
 for(let cat of categories){
+
 if(cat.type!=="dir") continue;
 
-let catDiv=document.createElement("div");
-catDiv.innerHTML=`<b>${cat.name}</b>`;
-document.getElementById("layers").appendChild(catDiv);
+let catContainer=document.createElement("div");
+catContainer.style.marginBottom="10px";
+
+let catHeader=document.createElement("div");
+catHeader.style.display="flex";
+catHeader.style.alignItems="center";
+
+let catCheck=document.createElement("input");
+catCheck.type="checkbox";
+catCheck.style.marginRight="6px";
+
+let catTitle=document.createElement("b");
+catTitle.innerText=cat.name;
+catTitle.style.cursor="pointer";
+
+catHeader.appendChild(catCheck);
+catHeader.appendChild(catTitle);
+catContainer.appendChild(catHeader);
+
+document.getElementById("layers").appendChild(catContainer);
+
+let yearContainer=document.createElement("div");
+yearContainer.style.display="none";
+yearContainer.style.marginLeft="20px";
+catContainer.appendChild(yearContainer);
+
+catTitle.onclick=function(){
+yearContainer.style.display=
+yearContainer.style.display==="none"?"block":"none";
+};
 
 const years=await fetchJSON(cat.url);
 
 for(let year of years){
+
 if(year.type!=="dir") continue;
 
 let yearDiv=document.createElement("div");
-yearDiv.className="year";
-yearDiv.innerText="▶ "+year.name;
-catDiv.appendChild(yearDiv);
+yearDiv.style.display="flex";
+yearDiv.style.alignItems="center";
+yearDiv.style.marginBottom="5px";
 
-let yearContainer=document.createElement("div");
-yearContainer.style.display="none";
-catDiv.appendChild(yearContainer);
+let yearCheck=document.createElement("input");
+yearCheck.type="checkbox";
+yearCheck.style.marginRight="6px";
 
-yearDiv.onclick=function(){
-yearContainer.style.display=yearContainer.style.display==="none"?"block":"none";
-};
+let yearLabel=document.createElement("span");
+yearLabel.innerText=year.name;
+
+yearDiv.appendChild(yearCheck);
+yearDiv.appendChild(yearLabel);
+yearContainer.appendChild(yearDiv);
+
+yearCheck.onchange=async function(){
+
+showLoading(true);
+
+if(this.checked){
 
 const locations=await fetchJSON(year.url);
 
 for(let loc of locations){
+
 if(loc.type!=="dir") continue;
-
-let locDiv=document.createElement("div");
-locDiv.className="layer-item location";
-
-let check=document.createElement("input");
-check.type="checkbox";
-
-let label=document.createElement("label");
-label.innerText=loc.name;
-
-locDiv.appendChild(check);
-locDiv.appendChild(label);
-yearContainer.appendChild(locDiv);
-
-check.onchange=async function(){
-
-if(this.checked){
-showLoading(true);
 
 const files=await fetchJSON(loc.url);
 
-let zip=null, txt=null, images=[];
+let zip=null;
 for(let f of files){
 if(f.name.endsWith(".zip")) zip=f.download_url;
-if(f.name.endsWith(".txt")) txt=f.download_url;
-if(f.name.match(/\.(jpg|jpeg|png)$/i)) images.push(f.download_url);
-}
-
-let popup=`<b>${loc.name}</b><hr>`;
-
-if(txt){
-const t=await fetch(txt);
-popup+=`<pre>${await t.text()}</pre><hr>`;
-}
-
-for(let img of images){
-popup+=`<img src="${img}" width="100%">`;
 }
 
 if(zip){
-popup+=`<br><a href="${zip}" target="_blank">Download ZIP</a>`;
-}
 
-if(zip){
-shp(zip).then(g=>{
-let layer=L.geoJSON(g,{
-onEachFeature:(f,l)=>l.bindPopup(popup)
-}).addTo(map);
-
-map.fitBounds(layer.getBounds());
-activeLayers[loc.path]=layer;
-showLoading(false);
-});
-}
-}
-else{
-map.removeLayer(activeLayers[loc.path]);
-}
-};
-}
-}
-}
-showLoading(false);
-}
-
-document.getElementById("uploadZip").onchange=function(e){
-let file=e.target.files[0];
-if(!file) return;
-showLoading(true);
-
-shp(file).then(g=>{
+await shp(zip).then(g=>{
 let layer=L.geoJSON(g).addTo(map);
-map.fitBounds(layer.getBounds());
-showLoading(false);
+activeLayers[loc.path]=layer;
 });
-};
-
-document.getElementById("search").onkeyup=function(){
-let val=this.value.toLowerCase();
-document.querySelectorAll(".location").forEach(l=>{
-l.style.display=l.innerText.toLowerCase().includes(val)?"flex":"none";
-});
-};
-
-document.getElementById("toggleSidebar").onclick=function(){
-let sb=document.getElementById("sidebar");
-if(sb.style.display==="none"){
-sb.style.display="block";
-this.style.right="26%";
-}else{
-sb.style.display="none";
-this.style.right="1%";
 }
+}
+
+fitAllLayers();
+}
+
+else{
+
+for(let key in activeLayers){
+if(key.includes(year.path)){
+map.removeLayer(activeLayers[key]);
+delete activeLayers[key];
+}
+}
+}
+
+showLoading(false);
 };
+
+catCheck.onchange=function(){
+
+yearCheck.checked=this.checked;
+yearCheck.dispatchEvent(new Event('change'));
+
+};
+}
+}
+
+showLoading(false);
+}
+
+function fitAllLayers(){
+let layers=Object.values(activeLayers);
+if(layers.length>0){
+let group=L.featureGroup(layers);
+map.fitBounds(group.getBounds());
+}
+}
 
 loadRepo();
 
 </script>
+
 </body>
 </html>
+
