@@ -21,21 +21,41 @@ height:100%;
 background:#f4f4f4;
 overflow:auto;
 padding:15px;
+transition:0.3s;
 }
-.layer-item {
+#toggleSidebar{
+position:absolute;
+top:10px;
+right:26%;
+background:white;
+padding:6px 10px;
+cursor:pointer;
+border-radius:6px;
+z-index:999;
+}
+.layer-item{
 display:flex;
 align-items:center;
-margin-bottom:8px;
+margin-left:15px;
+margin-bottom:5px;
 }
-.layer-item input {
-margin-right:8px;
+.layer-item input{
+margin-right:6px;
 }
-.gallery img {
+.year{
+margin-left:10px;
+cursor:pointer;
+font-weight:bold;
+}
+.location{
+margin-left:20px;
+}
+.gallery img{
 width:100%;
 margin-bottom:5px;
 border-radius:6px;
 }
-.loading {
+.loading{
 position:absolute;
 top:10px;
 left:50%;
@@ -45,6 +65,7 @@ color:white;
 padding:6px 12px;
 border-radius:6px;
 display:none;
+z-index:999;
 }
 </style>
 </head>
@@ -52,161 +73,184 @@ display:none;
 
 <div id="map"></div>
 <div class="loading" id="loading">Loading...</div>
+<div id="toggleSidebar">☰</div>
 
 <div id="sidebar">
 <h2>GSN DATA</h2>
+
 <input type="text" id="search" placeholder="Cari file / daerah..." style="width:100%;padding:5px;margin-bottom:10px;">
+
+<input type="file" id="uploadZip" accept=".zip,.kmz" style="margin-bottom:10px;">
+
+<select id="basemapSelect" style="width:100%;margin-bottom:10px;">
+<option value="osm">OpenStreetMap</option>
+<option value="satellite">Satellite</option>
+</select>
+
 <hr>
 <div id="layers"></div>
 </div>
 
 <script>
 
-const repo = "agenkkkk/GSN";
-const branch = "main";
-const baseAPI = `https://api.github.com/repos/${repo}/contents/files?ref=${branch}`;
+const repo="agenkkkk/GSN";
+const branch="main";
+const apiRoot=`https://api.github.com/repos/${repo}/contents/files?ref=${branch}`;
 
-const map = L.map('map').setView([-6.5, 107], 7);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-attribution: '&copy; OpenStreetMap'
-}).addTo(map);
+const map=L.map('map').setView([-2,118],5);
 
-let layerStore = {};
+const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+const satellite=L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png');
 
-function showLoading(state){
-document.getElementById("loading").style.display = state ? "block":"none";
+osm.addTo(map);
+
+document.getElementById("basemapSelect").onchange=function(){
+map.eachLayer(l=>map.removeLayer(l));
+if(this.value==="osm") osm.addTo(map);
+if(this.value==="satellite") satellite.addTo(map);
+};
+
+let activeLayers={};
+
+function showLoading(x){
+document.getElementById("loading").style.display=x?"block":"none";
 }
 
 async function fetchJSON(url){
-const res = await fetch(url);
+const res=await fetch(url);
 return await res.json();
 }
 
-async function loadRepository(){
+async function loadRepo(){
 showLoading(true);
-const categories = await fetchJSON(baseAPI);
+const categories=await fetchJSON(apiRoot);
 
-for (let cat of categories){
+for(let cat of categories){
+if(cat.type!=="dir") continue;
 
-if(cat.type !== "dir") continue;
-
-const catDiv = document.createElement("div");
-catDiv.innerHTML = `<h3>${cat.name}</h3>`;
+let catDiv=document.createElement("div");
+catDiv.innerHTML=`<b>${cat.name}</b>`;
 document.getElementById("layers").appendChild(catDiv);
 
-const years = await fetchJSON(cat.url);
+const years=await fetchJSON(cat.url);
 
-for (let year of years){
+for(let year of years){
+if(year.type!=="dir") continue;
 
-if(year.type !== "dir") continue;
+let yearDiv=document.createElement("div");
+yearDiv.className="year";
+yearDiv.innerText="▶ "+year.name;
+catDiv.appendChild(yearDiv);
 
-const locations = await fetchJSON(year.url);
+let yearContainer=document.createElement("div");
+yearContainer.style.display="none";
+catDiv.appendChild(yearContainer);
 
-for (let loc of locations){
+yearDiv.onclick=function(){
+yearContainer.style.display=yearContainer.style.display==="none"?"block":"none";
+};
 
-if(loc.type !== "dir") continue;
+const locations=await fetchJSON(year.url);
 
-createLayerItem(cat.name, year.name, loc);
-}
-}
-}
-showLoading(false);
-}
+for(let loc of locations){
+if(loc.type!=="dir") continue;
 
-async function createLayerItem(category, year, loc){
+let locDiv=document.createElement("div");
+locDiv.className="layer-item location";
 
-const container = document.createElement("div");
-container.className = "layer-item";
+let check=document.createElement("input");
+check.type="checkbox";
 
-const checkbox = document.createElement("input");
-checkbox.type = "checkbox";
+let label=document.createElement("label");
+label.innerText=loc.name;
 
-const label = document.createElement("label");
-label.innerText = `${loc.name} (${year})`;
+locDiv.appendChild(check);
+locDiv.appendChild(label);
+yearContainer.appendChild(locDiv);
 
-container.appendChild(checkbox);
-container.appendChild(label);
-document.getElementById("layers").appendChild(container);
-
-let layer;
-
-checkbox.onchange = async function(){
+check.onchange=async function(){
 
 if(this.checked){
-
 showLoading(true);
 
-const contents = await fetchJSON(loc.url);
+const files=await fetchJSON(loc.url);
 
-let zipURL = null;
-let txtURL = null;
-let images = [];
-
-for(let file of contents){
-
-if(file.name.endsWith(".zip")) zipURL = file.download_url;
-if(file.name.endsWith(".txt")) txtURL = file.download_url;
-if(file.name.match(/\.(jpg|jpeg|png)$/i)) images.push(file.download_url);
+let zip=null, txt=null, images=[];
+for(let f of files){
+if(f.name.endsWith(".zip")) zip=f.download_url;
+if(f.name.endsWith(".txt")) txt=f.download_url;
+if(f.name.match(/\.(jpg|jpeg|png)$/i)) images.push(f.download_url);
 }
 
-let popupContent = `<b>${loc.name}</b><br><b>Kategori:</b> ${category}<br><b>Tahun:</b> ${year}<br><hr>`;
+let popup=`<b>${loc.name}</b><hr>`;
 
-if(txtURL){
-const txt = await fetch(txtURL);
-popupContent += `<pre>${await txt.text()}</pre><hr>`;
+if(txt){
+const t=await fetch(txt);
+popup+=`<pre>${await t.text()}</pre><hr>`;
 }
 
-if(images.length>0){
-popupContent += `<div class="gallery">`;
 for(let img of images){
-popupContent += `<img src="${img}">`;
-}
-popupContent += `</div>`;
+popup+=`<img src="${img}" width="100%">`;
 }
 
-if(zipURL){
-popupContent += `<br><a href="${zipURL}" target="_blank">Download ZIP</a>`;
+if(zip){
+popup+=`<br><a href="${zip}" target="_blank">Download ZIP</a>`;
 }
 
-if(zipURL){
-
-shp(zipURL).then(function(geojson){
-
-layer = L.geoJSON(geojson,{
-onEachFeature: function(feature, layer){
-layer.bindPopup(popupContent);
-}
+if(zip){
+shp(zip).then(g=>{
+let layer=L.geoJSON(g,{
+onEachFeature:(f,l)=>l.bindPopup(popup)
 }).addTo(map);
 
 map.fitBounds(layer.getBounds());
-layerStore[loc.path] = layer;
+activeLayers[loc.path]=layer;
 showLoading(false);
-
 });
-
 }
-
 }
-
 else{
-
-map.removeLayer(layerStore[loc.path]);
+map.removeLayer(activeLayers[loc.path]);
+}
+};
 }
 }
 }
+showLoading(false);
+}
 
-document.getElementById("search").addEventListener("keyup", function(){
-let filter = this.value.toLowerCase();
-let items = document.querySelectorAll(".layer-item");
+document.getElementById("uploadZip").onchange=function(e){
+let file=e.target.files[0];
+if(!file) return;
+showLoading(true);
 
-items.forEach(item=>{
-item.style.display = item.innerText.toLowerCase().includes(filter) ? "flex":"none";
+shp(file).then(g=>{
+let layer=L.geoJSON(g).addTo(map);
+map.fitBounds(layer.getBounds());
+showLoading(false);
 });
-});
+};
 
-loadRepository();
+document.getElementById("search").onkeyup=function(){
+let val=this.value.toLowerCase();
+document.querySelectorAll(".location").forEach(l=>{
+l.style.display=l.innerText.toLowerCase().includes(val)?"flex":"none";
+});
+};
+
+document.getElementById("toggleSidebar").onclick=function(){
+let sb=document.getElementById("sidebar");
+if(sb.style.display==="none"){
+sb.style.display="block";
+this.style.right="26%";
+}else{
+sb.style.display="none";
+this.style.right="1%";
+}
+};
+
+loadRepo();
 
 </script>
-
 </body>
 </html>
