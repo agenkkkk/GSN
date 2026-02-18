@@ -1,204 +1,170 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-<meta charset="utf-8"/>
+<meta charset="UTF-8">
 <title>GSN WebGIS</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-body { margin:0; font-family:Arial, sans-serif; }
-#map { position:absolute; left:0; top:0; width:75%; height:100%; }
+body { margin:0; font-family:Arial; display:flex; }
 #sidebar {
-position:absolute;
-right:0;
-top:0;
-width:25%;
-height:100%;
-background:#f5f5f5;
-overflow:auto;
-padding:15px;
-box-shadow:-2px 0 5px rgba(0,0,0,0.1);
+    width:300px;
+    height:100vh;
+    overflow:auto;
+    background:#111;
+    color:white;
+    padding:15px;
 }
-.layer-group { margin-bottom:10px; }
-.year-item { margin-left:20px; margin-top:4px; }
-.loading {
-position:absolute;
-top:10px;
-left:50%;
-transform:translateX(-50%);
-background:black;
-color:white;
-padding:6px 12px;
-border-radius:6px;
-display:none;
-z-index:999;
+#map { flex:1; height:100vh; }
+
+.folder { margin-top:10px; }
+.year { margin-left:20px; margin-top:5px; }
+label { cursor:pointer; }
+button {
+    background:none;
+    border:none;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
 }
 </style>
 </head>
+
 <body>
 
-<div id="map"></div>
-<div class="loading" id="loading">Loading...</div>
-
 <div id="sidebar">
-<h2>GSN DATA</h2>
-
-<select id="basemapSelect" style="width:100%; margin-bottom:15px;">
-<option value="osm">OpenStreetMap</option>
-<option value="sat">Satellite</option>
-</select>
-
-<hr>
-<div id="layers"></div>
-
+<h3>DATA GSN</h3>
+<div id="folderList">Loading...</div>
 </div>
+
+<div id="map"></div>
 
 <script>
 
-const repo = "agenkkkk/GSN";
+const username = "agenkkkk";
+const repo = "GSN";
 const branch = "main";
-const apiRoot = `https://api.github.com/repos/${repo}/contents/files?ref=${branch}`;
+const baseAPI = `https://api.github.com/repos/${username}/${repo}/contents/files`;
 
-const map = L.map('map').setView([-2,118],5);
+const map = L.map('map').setView([-2.5, 118], 5);
 
-const osm = L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap'
+}).addTo(map);
 
-const satellite = L.tileLayer(
-'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-);
+let layers = {};
 
-document.getElementById("basemapSelect").onchange = function(){
-map.eachLayer(l=>map.removeLayer(l));
-if(this.value==="osm") osm.addTo(map);
-if(this.value==="sat") satellite.addTo(map);
-};
+async function loadFolders() {
+    const res = await fetch(baseAPI);
+    const folders = await res.json();
+    const container = document.getElementById("folderList");
+    container.innerHTML = "";
 
-let activeLayers = {};
+    folders.forEach(folder => {
+        if(folder.type !== "dir") return;
 
-function showLoading(x){
-document.getElementById("loading").style.display = x ? "block" : "none";
+        const div = document.createElement("div");
+        div.className = "folder";
+
+        const btn = document.createElement("button");
+        btn.textContent = "▼ " + folder.name;
+        btn.onclick = () => yearDiv.style.display =
+            yearDiv.style.display === "none" ? "block" : "none";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.onchange = () => toggleCategory(folder.name, checkbox.checked);
+
+        div.appendChild(checkbox);
+        div.appendChild(btn);
+
+        const yearDiv = document.createElement("div");
+        yearDiv.style.display = "none";
+
+        loadYears(folder.name, yearDiv);
+
+        div.appendChild(yearDiv);
+        container.appendChild(div);
+    });
 }
 
-async function fetchJSON(url){
-const res = await fetch(url);
-return await res.json();
+async function loadYears(folderName, container) {
+    const res = await fetch(`${baseAPI}/${encodeURIComponent(folderName)}`);
+    const years = await res.json();
+
+    years.forEach(year => {
+        if(year.type !== "dir") return;
+
+        const div = document.createElement("div");
+        div.className = "year";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.onchange = () =>
+            toggleYear(folderName, year.name, checkbox.checked);
+
+        const label = document.createElement("label");
+        label.textContent = " " + year.name;
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        container.appendChild(div);
+    });
 }
 
-function fitAll(){
-let layers = Object.values(activeLayers);
-if(layers.length>0){
-let group = L.featureGroup(layers);
-map.fitBounds(group.getBounds());
-}
-}
+async function toggleYear(folder, year, status) {
 
-async function loadRepo(){
+    const key = folder + "_" + year;
 
-showLoading(true);
+    if(status) {
 
-const categories = await fetchJSON(apiRoot);
+        const res = await fetch(`${baseAPI}/${encodeURIComponent(folder)}/${year}`);
+        const items = await res.json();
 
-for(let cat of categories){
+        layers[key] = L.layerGroup().addTo(map);
 
-if(cat.type!=="dir") continue;
+        items.forEach(item => {
+            if(item.name.endsWith(".zip")) {
 
-let groupDiv = document.createElement("div");
-groupDiv.className="layer-group";
+                // contoh marker dummy (karena SHP belum dibaca)
+                const lat = -7 + Math.random()*10;
+                const lng = 110 + Math.random()*10;
 
-let catCheck = document.createElement("input");
-catCheck.type="checkbox";
+                const marker = L.marker([lat,lng])
+                    .bindPopup(`
+                        <b>${folder}</b><br>
+                        Tahun: ${year}<br>
+                        <a href="${item.download_url}" target="_blank">
+                        Download ZIP
+                        </a>
+                    `);
 
-let catLabel = document.createElement("b");
-catLabel.innerText=" "+cat.name;
+                layers[key].addLayer(marker);
+            }
+        });
 
-groupDiv.appendChild(catCheck);
-groupDiv.appendChild(catLabel);
-
-document.getElementById("layers").appendChild(groupDiv);
-
-const years = await fetchJSON(cat.url);
-
-for(let year of years){
-
-if(year.type!=="dir") continue;
-
-let yearDiv = document.createElement("div");
-yearDiv.className="year-item";
-
-let yearCheck = document.createElement("input");
-yearCheck.type="checkbox";
-
-let yearLabel = document.createElement("span");
-yearLabel.innerText=" "+year.name;
-
-yearDiv.appendChild(yearCheck);
-yearDiv.appendChild(yearLabel);
-groupDiv.appendChild(yearDiv);
-
-yearCheck.onchange = async function(){
-
-showLoading(true);
-
-if(this.checked){
-
-const locations = await fetchJSON(year.url);
-
-for(let loc of locations){
-
-if(loc.type!=="dir") continue;
-
-const files = await fetchJSON(loc.url);
-
-let zip = null;
-
-for(let f of files){
-if(f.name.endsWith(".zip")) zip = f.download_url;
+    } else {
+        if(layers[key]) {
+            map.removeLayer(layers[key]);
+        }
+    }
 }
 
-if(zip){
+function toggleCategory(folder, status) {
 
-await shp(zip).then(g=>{
-let layer = L.geoJSON(g).addTo(map);
-activeLayers[loc.path]=layer;
-});
+    const yearCheckboxes = document.querySelectorAll(".year input");
 
-}
-}
-
-fitAll();
-
-}else{
-
-for(let key in activeLayers){
-if(key.includes(year.path)){
-map.removeLayer(activeLayers[key]);
-delete activeLayers[key];
-}
-}
+    yearCheckboxes.forEach(cb => {
+        if(cb.parentElement.textContent.includes(folder)) {
+            cb.checked = status;
+            cb.dispatchEvent(new Event("change"));
+        }
+    });
 }
 
-showLoading(false);
-};
-
-catCheck.onchange = function(){
-yearCheck.checked = this.checked;
-yearCheck.dispatchEvent(new Event("change"));
-};
-
-}
-}
-
-showLoading(false);
-}
-
-loadRepo();
+loadFolders();
 
 </script>
-
 </body>
 </html>
