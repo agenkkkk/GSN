@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>WebGIS Repository Auto System</title>
+<title>GSN WebGIS System</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,43 +13,28 @@ body{margin:0;font-family:Arial;display:flex;height:100vh;}
 #map{width:70%;}
 #sidebar{
   width:30%;
-  background:#f4f4f4;
+  background:#f7f7f7;
   overflow:auto;
   padding:15px;
+  border-left:1px solid #ddd;
 }
-.layer-item{
-  display:flex;
-  align-items:center;
-  margin-bottom:8px;
-}
-.layer-item input{
-  margin-right:8px;
-}
-img{
-  width:100%;
-  margin-bottom:8px;
-  border-radius:6px;
-}
-button{
-  padding:6px 10px;
-  margin-top:6px;
-  cursor:pointer;
-}
+.category{font-weight:bold;margin-top:10px;}
+.layer-item{display:flex;align-items:center;margin-left:10px;margin-bottom:5px;}
+.layer-item input{margin-right:6px;}
+#search{width:100%;padding:6px;margin-bottom:10px;}
+img{width:100%;margin-top:6px;border-radius:6px;}
+button{padding:6px 10px;margin-top:6px;cursor:pointer;}
 #loading{
-  position:absolute;
-  top:10px;
-  left:50%;
-  transform:translateX(-50%);
-  background:white;
-  padding:6px 12px;
-  border-radius:6px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.2);
-  display:none;
-}
-#search{
-  width:100%;
-  padding:6px;
-  margin-bottom:10px;
+position:absolute;
+top:10px;
+left:50%;
+transform:translateX(-50%);
+background:white;
+padding:6px 12px;
+border-radius:6px;
+box-shadow:0 2px 6px rgba(0,0,0,0.2);
+display:none;
+z-index:999;
 }
 </style>
 </head>
@@ -59,10 +44,9 @@ button{
 <div id="map"></div>
 
 <div id="sidebar">
-<h3>Layer Data</h3>
+<h3>GSN DATA</h3>
 
 <input type="text" id="search" placeholder="Cari file / daerah...">
-
 <input type="file" id="uploadZip" accept=".zip">
 <hr>
 
@@ -76,10 +60,8 @@ button{
 
 <script>
 
-const repoUser="agenkkkk";
-const repoName="GSN";
-const basePath="files";
-const apiBase=`https://api.github.com/repos/${repoUser}/${repoName}/contents/`;
+const apiBase="https://api.github.com/repos/agenkkkk/GSN/contents/";
+const basePath="file";
 
 const map=L.map("map").setView([-2,118],5);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
@@ -87,130 +69,160 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 const loading=document.getElementById("loading");
 const layerList=document.getElementById("layerList");
 const detail=document.getElementById("detail");
-const searchInput=document.getElementById("search");
+const search=document.getElementById("search");
 
-let layers={};
+let activeLayers={};
 
 function showLoading(x){loading.style.display=x?"block":"none"}
 
 async function fetchFolder(path){
-  const res=await fetch(apiBase+path);
-  return await res.json();
+const res=await fetch(apiBase+path);
+return await res.json();
 }
 
-async function loadAll(){
+async function init(){
 
-  const jenisList=await fetchFolder(basePath);
+const jenisList=await fetchFolder(basePath);
 
-  for(const jenis of jenisList){
-    if(jenis.type!=="dir")continue;
+for(const jenis of jenisList){
 
-    const tahunList=await fetchFolder(jenis.path);
+if(jenis.type!=="dir")continue;
 
-    for(const tahun of tahunList){
-      if(tahun.type!=="dir")continue;
+const categoryDiv=document.createElement("div");
+categoryDiv.className="category";
+categoryDiv.innerText=jenis.name.toUpperCase();
+layerList.appendChild(categoryDiv);
 
-      const lokasiList=await fetchFolder(tahun.path);
+const tahunList=await fetchFolder(jenis.path);
 
-      for(const lokasi of lokasiList){
-        if(lokasi.type!=="dir")continue;
+for(const tahun of tahunList){
 
-        addLayerItem(lokasi.path,lokasi.name);
-      }
-    }
-  }
+if(tahun.type!=="dir")continue;
+
+const lokasiList=await fetchFolder(tahun.path);
+
+for(const lokasi of lokasiList){
+
+if(lokasi.type!=="dir")continue;
+
+createLayerItem(lokasi.path,lokasi.name);
+
 }
 
-async function addLayerItem(path,nama){
+}
 
-  const files=await fetchFolder(path);
+}
 
-  let zipFile=null;
-  let txtFile=null;
-  let images=[];
+}
 
-  files.forEach(f=>{
-    const n=f.name.toLowerCase();
-    if(n.endsWith(".zip"))zipFile=f.download_url;
-    if(n.endsWith(".txt"))txtFile=f.download_url;
-    if(n.match(/\.(jpg|jpeg|png)$/))images.push(f.download_url);
-  });
+async function createLayerItem(path,nama){
 
-  if(!zipFile)return;
+const files=await fetchFolder(path);
 
-  const div=document.createElement("div");
-  div.className="layer-item";
-  div.dataset.name=nama.toLowerCase();
+let zipFile=null;
+let txtFile=null;
+let images=[];
 
-  const radio=document.createElement("input");
-  radio.type="checkbox";
+files.forEach(f=>{
+const n=f.name.toLowerCase();
+if(n.endsWith(".zip"))zipFile=f.download_url;
+if(n.endsWith(".txt"))txtFile=f.download_url;
+if(n.match(/\.(jpg|jpeg|png)$/))images.push(f.download_url);
+});
 
-  const label=document.createElement("span");
-  label.innerText=nama;
+if(!zipFile)return;
 
-  div.appendChild(radio);
-  div.appendChild(label);
-  layerList.appendChild(div);
+const div=document.createElement("div");
+div.className="layer-item";
+div.dataset.name=nama.toLowerCase();
 
-  radio.addEventListener("change",async function(){
+const toggle=document.createElement("input");
+toggle.type="checkbox";
 
-    if(this.checked){
-      showLoading(true);
-      const geo=await shp(zipFile);
-      const layer=L.geoJSON(geo,{style:{color:"#0077ff"}}).addTo(map);
-      map.fitBounds(layer.getBounds());
-      layers[nama]=layer;
-      showDetail(nama,txtFile,images,zipFile);
-      showLoading(false);
-    }else{
-      if(layers[nama]){
-        map.removeLayer(layers[nama]);
-        delete layers[nama];
-      }
-      detail.innerHTML="";
-    }
+const label=document.createElement("span");
+label.innerText=nama;
 
-  });
+div.appendChild(toggle);
+div.appendChild(label);
+layerList.appendChild(div);
+
+toggle.addEventListener("change",async function(){
+
+if(this.checked){
+
+showLoading(true);
+
+const geo=await shp(zipFile);
+const layer=L.geoJSON(geo,{style:{color:"#0077ff",weight:2}}).addTo(map);
+
+map.fitBounds(layer.getBounds());
+activeLayers[nama]=layer;
+
+showDetail(nama,txtFile,images,zipFile);
+
+showLoading(false);
+
+}else{
+
+if(activeLayers[nama]){
+map.removeLayer(activeLayers[nama]);
+delete activeLayers[nama];
+}
+
+detail.innerHTML="";
+
+}
+
+});
 
 }
 
 async function showDetail(nama,txtFile,images,zipFile){
 
-  detail.innerHTML=`<h3>${nama}</h3>`;
+detail.innerHTML=`<h3>${nama}</h3>`;
 
-  if(txtFile){
-    const t=await fetch(txtFile);
-    detail.innerHTML+=`<pre>${await t.text()}</pre>`;
-  }
-
-  images.forEach(img=>{
-    detail.innerHTML+=`<img src="${img}">`;
-  });
-
-  detail.innerHTML+=`<a href="${zipFile}" target="_blank">
-  <button>Download SHP</button></a>`;
+if(txtFile){
+const t=await fetch(txtFile);
+detail.innerHTML+=`<pre>${await t.text()}</pre>`;
 }
 
-searchInput.addEventListener("input",function(){
-  const value=this.value.toLowerCase();
-  document.querySelectorAll(".layer-item").forEach(item=>{
-    item.style.display=item.dataset.name.includes(value)?"flex":"none";
-  });
+images.forEach(img=>{
+detail.innerHTML+=`<img src="${img}">`;
+});
+
+detail.innerHTML+=`
+<a href="${zipFile}" target="_blank">
+<button>Download SHP</button>
+</a>
+`;
+
+}
+
+search.addEventListener("input",function(){
+const value=this.value.toLowerCase();
+document.querySelectorAll(".layer-item").forEach(item=>{
+item.style.display=item.dataset.name.includes(value)?"flex":"none";
+});
 });
 
 document.getElementById("uploadZip").addEventListener("change",async function(e){
-  const file=e.target.files[0];
-  if(!file)return;
-  showLoading(true);
-  const geo=await shp(file);
-  const layer=L.geoJSON(geo,{style:{color:"red"}}).addTo(map);
-  map.fitBounds(layer.getBounds());
-  showLoading(false);
+
+const file=e.target.files[0];
+if(!file)return;
+
+showLoading(true);
+
+const geo=await shp(file);
+const layer=L.geoJSON(geo,{style:{color:"red",weight:2}}).addTo(map);
+
+map.fitBounds(layer.getBounds());
+
+showLoading(false);
+
 });
 
-loadAll();
+init();
 
 </script>
 </body>
 </html>
-
