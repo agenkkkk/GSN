@@ -93,163 +93,153 @@ z-index:999;
 
 <script>
 
-const repo="agenkkkk/GSN";
-const branch="main";
-const apiRoot=`https://api.github.com/repos/${repo}/contents/files?ref=${branch}`;
+const repo = "agenkkkk/GSN";
+const branch = "main";
+const apiRoot = `https://api.github.com/repos/${repo}/contents/files?ref=${branch}`;
 
-const map=L.map('map').setView([-2,118],5);
+const map = L.map('map').setView([-2,118],5);
 
-const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-const satellite=L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png');
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+const satellite = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png');
 
-document.getElementById("basemapSelect").onchange=function(){
-map.eachLayer(l=>map.removeLayer(l));
-if(this.value==="osm") osm.addTo(map);
-if(this.value==="satellite") satellite.addTo(map);
+document.getElementById("basemapSelect").onchange = function(){
+    map.eachLayer(l => map.removeLayer(l));
+    if(this.value==="osm") osm.addTo(map);
+    if(this.value==="satellite") satellite.addTo(map);
 };
 
-let activeLayers={};
+let activeLayers = {};
 
 function showLoading(x){
-document.getElementById("loading").style.display=x?"block":"none";
+    document.getElementById("loading").style.display = x ? "block" : "none";
 }
 
 async function fetchJSON(url){
-const res=await fetch(url);
-return await res.json();
+    const res = await fetch(url);
+    return await res.json();
 }
 
 async function loadRepo(){
 
-showLoading(true);
+    showLoading(true);
 
-const categories=await fetchJSON(apiRoot);
+    const categories = await fetchJSON(apiRoot);
 
-for(let cat of categories){
+    for(let cat of categories){
 
-if(cat.type!=="dir") continue;
+        if(cat.type !== "dir") continue;
 
-let catContainer=document.createElement("div");
-catContainer.style.marginBottom="10px";
+        const catContainer = document.createElement("div");
+        catContainer.style.marginBottom = "10px";
 
-let catHeader=document.createElement("div");
-catHeader.style.display="flex";
-catHeader.style.alignItems="center";
+        const catDiv = document.createElement("div");
+        catDiv.style.display = "flex";
+        catDiv.style.alignItems = "center";
 
-let catCheck=document.createElement("input");
-catCheck.type="checkbox";
-catCheck.style.marginRight="6px";
+        const catCheck = document.createElement("input");
+        catCheck.type = "checkbox";
+        catCheck.style.marginRight = "6px";
 
-let catTitle=document.createElement("b");
-catTitle.innerText=cat.name;
-catTitle.style.cursor="pointer";
+        const catLabel = document.createElement("b");
+        catLabel.innerText = cat.name;
 
-catHeader.appendChild(catCheck);
-catHeader.appendChild(catTitle);
-catContainer.appendChild(catHeader);
+        catDiv.appendChild(catCheck);
+        catDiv.appendChild(catLabel);
+        catContainer.appendChild(catDiv);
 
-document.getElementById("layers").appendChild(catContainer);
+        document.getElementById("layers").appendChild(catContainer);
 
-let yearContainer=document.createElement("div");
-yearContainer.style.display="none";
-yearContainer.style.marginLeft="20px";
-catContainer.appendChild(yearContainer);
+        const years = await fetchJSON(cat.url);
 
-catTitle.onclick=function(){
-yearContainer.style.display=
-yearContainer.style.display==="none"?"block":"none";
-};
+        for(let year of years){
 
-const years=await fetchJSON(cat.url);
+            if(year.type !== "dir") continue;
 
-for(let year of years){
+            const yearDiv = document.createElement("div");
+            yearDiv.style.display = "flex";
+            yearDiv.style.alignItems = "center";
+            yearDiv.style.marginLeft = "20px";
+            yearDiv.style.marginBottom = "4px";
 
-if(year.type!=="dir") continue;
+            const yearCheck = document.createElement("input");
+            yearCheck.type = "checkbox";
+            yearCheck.style.marginRight = "6px";
 
-let yearDiv=document.createElement("div");
-yearDiv.style.display="flex";
-yearDiv.style.alignItems="center";
-yearDiv.style.marginBottom="5px";
+            const yearLabel = document.createElement("span");
+            yearLabel.innerText = year.name;
 
-let yearCheck=document.createElement("input");
-yearCheck.type="checkbox";
-yearCheck.style.marginRight="6px";
+            yearDiv.appendChild(yearCheck);
+            yearDiv.appendChild(yearLabel);
+            catContainer.appendChild(yearDiv);
 
-let yearLabel=document.createElement("span");
-yearLabel.innerText=year.name;
+            // ==== YEAR ON/OFF ====
+            yearCheck.onchange = async function(){
 
-yearDiv.appendChild(yearCheck);
-yearDiv.appendChild(yearLabel);
-yearContainer.appendChild(yearDiv);
+                showLoading(true);
 
-yearCheck.onchange=async function(){
+                if(this.checked){
 
-showLoading(true);
+                    const locations = await fetchJSON(year.url);
 
-if(this.checked){
+                    for(let loc of locations){
 
-const locations=await fetchJSON(year.url);
+                        if(loc.type !== "dir") continue;
 
-for(let loc of locations){
+                        const files = await fetchJSON(loc.url);
 
-if(loc.type!=="dir") continue;
+                        let zip = null;
+                        for(let f of files){
+                            if(f.name.endsWith(".zip")) zip = f.download_url;
+                        }
 
-const files=await fetchJSON(loc.url);
+                        if(zip){
+                            await shp(zip).then(g=>{
+                                let layer = L.geoJSON(g).addTo(map);
+                                activeLayers[loc.path] = layer;
+                            });
+                        }
+                    }
 
-let zip=null;
-for(let f of files){
-if(f.name.endsWith(".zip")) zip=f.download_url;
-}
+                    fitAllLayers();
 
-if(zip){
+                } else {
 
-await shp(zip).then(g=>{
-let layer=L.geoJSON(g).addTo(map);
-activeLayers[loc.path]=layer;
-});
-}
-}
+                    for(let key in activeLayers){
+                        if(key.includes(year.path)){
+                            map.removeLayer(activeLayers[key]);
+                            delete activeLayers[key];
+                        }
+                    }
+                }
 
-fitAllLayers();
-}
+                showLoading(false);
+            };
 
-else{
+            // ==== CATEGORY ON/OFF ====
+            catCheck.onchange = function(){
 
-for(let key in activeLayers){
-if(key.includes(year.path)){
-map.removeLayer(activeLayers[key]);
-delete activeLayers[key];
-}
-}
-}
+                yearCheck.checked = this.checked;
+                yearCheck.dispatchEvent(new Event('change'));
 
-showLoading(false);
-};
+            };
+        }
+    }
 
-catCheck.onchange=function(){
-
-yearCheck.checked=this.checked;
-yearCheck.dispatchEvent(new Event('change'));
-
-};
-}
-}
-
-showLoading(false);
+    showLoading(false);
 }
 
 function fitAllLayers(){
-let layers=Object.values(activeLayers);
-if(layers.length>0){
-let group=L.featureGroup(layers);
-map.fitBounds(group.getBounds());
-}
+    const layers = Object.values(activeLayers);
+    if(layers.length > 0){
+        const group = L.featureGroup(layers);
+        map.fitBounds(group.getBounds());
+    }
 }
 
 loadRepo();
 
 </script>
-
 </body>
 </html>
+
 
