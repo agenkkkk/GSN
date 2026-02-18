@@ -1,229 +1,212 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8"/>
 <title>GSN WebGIS System</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
+<script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
 <style>
-body{margin:0;font-family:Arial;display:flex;height:100vh;}
-#map{width:70%;}
-#sidebar{
-  width:30%;
-  background:#f7f7f7;
-  overflow:auto;
-  padding:15px;
-  border-left:1px solid #ddd;
+body { margin:0; font-family:Arial; }
+#map { position:absolute; top:0; left:0; width:75%; height:100%; }
+#sidebar {
+position:absolute;
+right:0;
+top:0;
+width:25%;
+height:100%;
+background:#f4f4f4;
+overflow:auto;
+padding:15px;
 }
-.category{font-weight:bold;margin-top:10px;}
-.layer-item{display:flex;align-items:center;margin-left:10px;margin-bottom:5px;}
-.layer-item input{margin-right:6px;}
-#search{width:100%;padding:6px;margin-bottom:10px;}
-img{width:100%;margin-top:6px;border-radius:6px;}
-button{padding:6px 10px;margin-top:6px;cursor:pointer;}
-#loading{
+.layer-item {
+display:flex;
+align-items:center;
+margin-bottom:8px;
+}
+.layer-item input {
+margin-right:8px;
+}
+.gallery img {
+width:100%;
+margin-bottom:5px;
+border-radius:6px;
+}
+.loading {
 position:absolute;
 top:10px;
 left:50%;
 transform:translateX(-50%);
-background:white;
+background:black;
+color:white;
 padding:6px 12px;
 border-radius:6px;
-box-shadow:0 2px 6px rgba(0,0,0,0.2);
 display:none;
-z-index:999;
 }
 </style>
 </head>
-
 <body>
 
 <div id="map"></div>
+<div class="loading" id="loading">Loading...</div>
 
 <div id="sidebar">
-<h3>GSN DATA</h3>
-
-<input type="text" id="search" placeholder="Cari file / daerah...">
-<input type="file" id="uploadZip" accept=".zip">
+<h2>GSN DATA</h2>
+<input type="text" id="search" placeholder="Cari file / daerah..." style="width:100%;padding:5px;margin-bottom:10px;">
 <hr>
-
-<div id="layerList"></div>
-<hr>
-<div id="detail"></div>
-
+<div id="layers"></div>
 </div>
-
-<div id="loading">Loading...</div>
 
 <script>
 
-const apiBase="https://api.github.com/repos/agenkkkk/GSN/contents/";
-const basePath="files";
+const repo = "agenkkkk/GSN";
+const branch = "main";
+const baseAPI = `https://api.github.com/repos/${repo}/contents/files?ref=${branch}`;
 
-const map=L.map("map").setView([-2,118],5);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+const map = L.map('map').setView([-6.5, 107], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+attribution: '&copy; OpenStreetMap'
+}).addTo(map);
 
-const loading=document.getElementById("loading");
-const layerList=document.getElementById("layerList");
-const detail=document.getElementById("detail");
-const search=document.getElementById("search");
+let layerStore = {};
 
-let activeLayers={};
+function showLoading(state){
+document.getElementById("loading").style.display = state ? "block":"none";
+}
 
-function showLoading(x){loading.style.display=x?"block":"none"}
-
-async function fetchFolder(path){
-const res=await fetch(apiBase+path);
+async function fetchJSON(url){
+const res = await fetch(url);
 return await res.json();
 }
 
-async function init(){
+async function loadRepository(){
+showLoading(true);
+const categories = await fetchJSON(baseAPI);
 
-const jenisList=await fetchFolder(basePath);
+for (let cat of categories){
 
-for(const jenis of jenisList){
+if(cat.type !== "dir") continue;
 
-if(jenis.type!=="dir")continue;
+const catDiv = document.createElement("div");
+catDiv.innerHTML = `<h3>${cat.name}</h3>`;
+document.getElementById("layers").appendChild(catDiv);
 
-const categoryDiv=document.createElement("div");
-categoryDiv.className="category";
-categoryDiv.innerText=jenis.name.toUpperCase();
-layerList.appendChild(categoryDiv);
+const years = await fetchJSON(cat.url);
 
-const tahunList=await fetchFolder(jenis.path);
+for (let year of years){
 
-for(const tahun of tahunList){
+if(year.type !== "dir") continue;
 
-if(tahun.type!=="dir")continue;
+const locations = await fetchJSON(year.url);
 
-const lokasiList=await fetchFolder(tahun.path);
+for (let loc of locations){
 
-for(const lokasi of lokasiList){
+if(loc.type !== "dir") continue;
 
-if(lokasi.type!=="dir")continue;
-
-createLayerItem(lokasi.path,lokasi.name);
-
+createLayerItem(cat.name, year.name, loc);
+}
+}
+}
+showLoading(false);
 }
 
-}
+async function createLayerItem(category, year, loc){
 
-}
+const container = document.createElement("div");
+container.className = "layer-item";
 
-}
+const checkbox = document.createElement("input");
+checkbox.type = "checkbox";
 
-async function createLayerItem(path,nama){
+const label = document.createElement("label");
+label.innerText = `${loc.name} (${year})`;
 
-const files=await fetchFolder(path);
+container.appendChild(checkbox);
+container.appendChild(label);
+document.getElementById("layers").appendChild(container);
 
-let zipFile=null;
-let txtFile=null;
-let images=[];
+let layer;
 
-files.forEach(f=>{
-const n=f.name.toLowerCase();
-if(n.endsWith(".zip"))zipFile=f.download_url;
-if(n.endsWith(".txt"))txtFile=f.download_url;
-if(n.match(/\.(jpg|jpeg|png)$/))images.push(f.download_url);
-});
-
-if(!zipFile)return;
-
-const div=document.createElement("div");
-div.className="layer-item";
-div.dataset.name=nama.toLowerCase();
-
-const toggle=document.createElement("input");
-toggle.type="checkbox";
-
-const label=document.createElement("span");
-label.innerText=nama;
-
-div.appendChild(toggle);
-div.appendChild(label);
-layerList.appendChild(div);
-
-toggle.addEventListener("change",async function(){
+checkbox.onchange = async function(){
 
 if(this.checked){
 
 showLoading(true);
 
-const geo=await shp(zipFile);
-const layer=L.geoJSON(geo,{style:{color:"#0077ff",weight:2}}).addTo(map);
+const contents = await fetchJSON(loc.url);
+
+let zipURL = null;
+let txtURL = null;
+let images = [];
+
+for(let file of contents){
+
+if(file.name.endsWith(".zip")) zipURL = file.download_url;
+if(file.name.endsWith(".txt")) txtURL = file.download_url;
+if(file.name.match(/\.(jpg|jpeg|png)$/i)) images.push(file.download_url);
+}
+
+let popupContent = `<b>${loc.name}</b><br><b>Kategori:</b> ${category}<br><b>Tahun:</b> ${year}<br><hr>`;
+
+if(txtURL){
+const txt = await fetch(txtURL);
+popupContent += `<pre>${await txt.text()}</pre><hr>`;
+}
+
+if(images.length>0){
+popupContent += `<div class="gallery">`;
+for(let img of images){
+popupContent += `<img src="${img}">`;
+}
+popupContent += `</div>`;
+}
+
+if(zipURL){
+popupContent += `<br><a href="${zipURL}" target="_blank">Download ZIP</a>`;
+}
+
+if(zipURL){
+
+shp(zipURL).then(function(geojson){
+
+layer = L.geoJSON(geojson,{
+onEachFeature: function(feature, layer){
+layer.bindPopup(popupContent);
+}
+}).addTo(map);
 
 map.fitBounds(layer.getBounds());
-activeLayers[nama]=layer;
-
-showDetail(nama,txtFile,images,zipFile);
-
-showLoading(false);
-
-}else{
-
-if(activeLayers[nama]){
-map.removeLayer(activeLayers[nama]);
-delete activeLayers[nama];
-}
-
-detail.innerHTML="";
-
-}
-
-});
-
-}
-
-async function showDetail(nama,txtFile,images,zipFile){
-
-detail.innerHTML=`<h3>${nama}</h3>`;
-
-if(txtFile){
-const t=await fetch(txtFile);
-detail.innerHTML+=`<pre>${await t.text()}</pre>`;
-}
-
-images.forEach(img=>{
-detail.innerHTML+=`<img src="${img}">`;
-});
-
-detail.innerHTML+=`
-<a href="${zipFile}" target="_blank">
-<button>Download SHP</button>
-</a>
-`;
-
-}
-
-search.addEventListener("input",function(){
-const value=this.value.toLowerCase();
-document.querySelectorAll(".layer-item").forEach(item=>{
-item.style.display=item.dataset.name.includes(value)?"flex":"none";
-});
-});
-
-document.getElementById("uploadZip").addEventListener("change",async function(e){
-
-const file=e.target.files[0];
-if(!file)return;
-
-showLoading(true);
-
-const geo=await shp(file);
-const layer=L.geoJSON(geo,{style:{color:"red",weight:2}}).addTo(map);
-
-map.fitBounds(layer.getBounds());
-
+layerStore[loc.path] = layer;
 showLoading(false);
 
 });
 
-init();
+}
+
+}
+
+else{
+
+map.removeLayer(layerStore[loc.path]);
+}
+}
+}
+
+document.getElementById("search").addEventListener("keyup", function(){
+let filter = this.value.toLowerCase();
+let items = document.querySelectorAll(".layer-item");
+
+items.forEach(item=>{
+item.style.display = item.innerText.toLowerCase().includes(filter) ? "flex":"none";
+});
+});
+
+loadRepository();
 
 </script>
+
 </body>
 </html>
-
