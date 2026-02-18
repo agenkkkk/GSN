@@ -3,11 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <title>GSN WebGIS</title>
+
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-body { margin:0; font-family:Arial; display:flex; }
+body {
+    margin:0;
+    font-family:Arial, sans-serif;
+    display:flex;
+}
+
 #sidebar {
     width:300px;
     height:100vh;
@@ -16,11 +22,15 @@ body { margin:0; font-family:Arial; display:flex; }
     color:white;
     padding:15px;
 }
-#map { flex:1; height:100vh; }
+
+#map {
+    flex:1;
+    height:100vh;
+}
 
 .folder { margin-top:10px; }
 .year { margin-left:20px; margin-top:5px; }
-label { cursor:pointer; }
+
 button {
     background:none;
     border:none;
@@ -28,143 +38,212 @@ button {
     font-weight:bold;
     cursor:pointer;
 }
+
+input { cursor:pointer; }
+
 </style>
 </head>
 
 <body>
 
 <div id="sidebar">
-<h3>DATA GSN</h3>
-<div id="folderList">Loading...</div>
+    <h3>DATA GSN</h3>
+    <div id="folderList">Loading...</div>
 </div>
 
 <div id="map"></div>
 
 <script>
 
+// ============================
+// CONFIG
+// ============================
+
 const username = "agenkkkk";
 const repo = "GSN";
 const branch = "main";
+
 const baseAPI = `https://api.github.com/repos/${username}/${repo}/contents/files`;
 
-const map = L.map('map').setView([-2.5, 118], 5);
+// ============================
+// MAP
+// ============================
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+const map = L.map('map').setView([-2.5,118],5);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'© OpenStreetMap'
 }).addTo(map);
 
 let layers = {};
 
-async function loadFolders() {
-    const res = await fetch(baseAPI);
-    const folders = await res.json();
+// ============================
+// BUILD SIDEBAR (AUTO CATEGORY)
+// ============================
+
+async function buildSidebar(){
+
     const container = document.getElementById("folderList");
-    container.innerHTML = "";
+    container.innerHTML = "Loading...";
 
-    folders.forEach(folder => {
-        if(folder.type !== "dir") return;
+    try {
 
-        const div = document.createElement("div");
-        div.className = "folder";
+        const res = await fetch(baseAPI);
+        const categories = await res.json();
 
-        const btn = document.createElement("button");
-        btn.textContent = "▼ " + folder.name;
-        btn.onclick = () => yearDiv.style.display =
-            yearDiv.style.display === "none" ? "block" : "none";
+        container.innerHTML = "";
 
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.onchange = () => toggleCategory(folder.name, checkbox.checked);
+        categories.forEach(cat=>{
 
-        div.appendChild(checkbox);
-        div.appendChild(btn);
+            if(cat.type !== "dir") return;
 
-        const yearDiv = document.createElement("div");
-        yearDiv.style.display = "none";
+            const div = document.createElement("div");
+            div.className = "folder";
 
-        loadYears(folder.name, yearDiv);
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
 
-        div.appendChild(yearDiv);
-        container.appendChild(div);
-    });
-}
+            const btn = document.createElement("button");
+            btn.textContent = "▼ " + cat.name;
 
-async function loadYears(folderName, container) {
-    const res = await fetch(`${baseAPI}/${encodeURIComponent(folderName)}`);
-    const years = await res.json();
+            const yearDiv = document.createElement("div");
+            yearDiv.style.display = "none";
 
-    years.forEach(year => {
-        if(year.type !== "dir") return;
+            btn.onclick = ()=>{
+                yearDiv.style.display =
+                yearDiv.style.display === "none" ? "block" : "none";
+            };
 
-        const div = document.createElement("div");
-        div.className = "year";
+            // checkbox kategori → aktifkan semua tahun
+            checkbox.onchange = ()=>{
+                const yearChecks = yearDiv.querySelectorAll("input");
+                yearChecks.forEach(cb=>{
+                    cb.checked = checkbox.checked;
+                    cb.dispatchEvent(new Event("change"));
+                });
+            };
 
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.onchange = () =>
-            toggleYear(folderName, year.name, checkbox.checked);
+            div.appendChild(checkbox);
+            div.appendChild(btn);
 
-        const label = document.createElement("label");
-        label.textContent = " " + year.name;
+            loadYears(cat.name, yearDiv);
 
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        container.appendChild(div);
-    });
-}
-
-async function toggleYear(folder, year, status) {
-
-    const key = folder + "_" + year;
-
-    if(status) {
-
-        const res = await fetch(`${baseAPI}/${encodeURIComponent(folder)}/${year}`);
-        const items = await res.json();
-
-        layers[key] = L.layerGroup().addTo(map);
-
-        items.forEach(item => {
-            if(item.name.endsWith(".zip")) {
-
-                // contoh marker dummy (karena SHP belum dibaca)
-                const lat = -7 + Math.random()*10;
-                const lng = 110 + Math.random()*10;
-
-                const marker = L.marker([lat,lng])
-                    .bindPopup(`
-                        <b>${folder}</b><br>
-                        Tahun: ${year}<br>
-                        <a href="${item.download_url}" target="_blank">
-                        Download ZIP
-                        </a>
-                    `);
-
-                layers[key].addLayer(marker);
-            }
+            div.appendChild(yearDiv);
+            container.appendChild(div);
         });
 
+    } catch (err) {
+        container.innerHTML = "Gagal memuat data (Rate limit GitHub)";
+        console.error(err);
+    }
+}
+
+// ============================
+// LOAD TAHUN
+// ============================
+
+async function loadYears(category, container){
+
+    try {
+
+        const res = await fetch(`${baseAPI}/${encodeURIComponent(category)}`);
+        const years = await res.json();
+
+        years.forEach(year=>{
+
+            if(year.type !== "dir") return;
+
+            const div = document.createElement("div");
+            div.className = "year";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+
+            checkbox.onchange = ()=>{
+                toggleYear(category, year.name, checkbox.checked);
+            };
+
+            const label = document.createElement("label");
+            label.textContent = " " + year.name;
+
+            div.appendChild(checkbox);
+            div.appendChild(label);
+            container.appendChild(div);
+        });
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// ============================
+// TOGGLE TAHUN
+// ============================
+
+async function toggleYear(category, year, status){
+
+    const key = category + "_" + year;
+
+    if(status){
+
+        const group = L.layerGroup().addTo(map);
+        layers[key] = group;
+
+        try {
+
+            // Ambil folder project dalam tahun
+            const res = await fetch(`${baseAPI}/${encodeURIComponent(category)}/${year}`);
+            const projects = await res.json();
+
+            for(const proj of projects){
+
+                if(proj.type !== "dir") continue;
+
+                // Ambil isi folder project
+                const res2 = await fetch(proj.url);
+                const files = await res2.json();
+
+                files.forEach(file=>{
+
+                    if(file.name.endsWith(".zip")){
+
+                        // marker contoh (dummy)
+                        const lat = -7 + Math.random()*10;
+                        const lng = 110 + Math.random()*10;
+
+                        const marker = L.marker([lat,lng])
+                        .bindPopup(`
+                            <b>${category}</b><br>
+                            Tahun: ${year}<br>
+                            <a href="${file.download_url}" target="_blank">
+                            Download ZIP
+                            </a>
+                        `);
+
+                        group.addLayer(marker);
+                    }
+                });
+            }
+
+        } catch (err) {
+            console.error(err);
+        }
+
     } else {
-        if(layers[key]) {
+
+        if(layers[key]){
             map.removeLayer(layers[key]);
         }
     }
 }
 
-function toggleCategory(folder, status) {
+// ============================
+// START
+// ============================
 
-    const yearCheckboxes = document.querySelectorAll(".year input");
-
-    yearCheckboxes.forEach(cb => {
-        if(cb.parentElement.textContent.includes(folder)) {
-            cb.checked = status;
-            cb.dispatchEvent(new Event("change"));
-        }
-    });
-}
-
-loadFolders();
+buildSidebar();
 
 </script>
+
 </body>
 </html>
